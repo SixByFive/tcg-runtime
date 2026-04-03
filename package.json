@@ -1,0 +1,18 @@
+{
+  "name": "sixbyfive-tcg-services",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "packageManager": "pnpm@10.17.1",
+  "scripts": {
+    "dev": "pnpm -r --parallel dev",
+    "dev:core": "pnpm --parallel --filter @sbf/gateway --filter @sbf/auth-service --filter @sbf/catalog-service dev",
+    "dev:gateway": "pnpm --filter @sbf/gateway dev",
+    "dev:auth": "pnpm --filter @sbf/auth-service dev",
+    "dev:catalog": "pnpm --filter @sbf/catalog-service dev",
+
+    "health": "node infra/scripts/health-all.mjs",
+    "health:strict": "node infra/scripts/health-all.mjs --strict",
+    "health:core": "node infra/scripts/health-all.mjs --only=gateway,auth-service,catalog-service --strict"
+  }
+}

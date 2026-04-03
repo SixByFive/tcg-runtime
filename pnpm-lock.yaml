@@ -1,0 +1,46 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .: {}
+
+  apps/auth-service:
+    dependencies:
+      '@sbf/config':
+        specifier: workspace:*
+        version: link:../../packages/config
+      '@sbf/logger':
+        specifier: workspace:*
+        version: link:../../packages/logger
+
+  apps/catalog-service:
+    dependencies:
+      '@sbf/config':
+        specifier: workspace:*
+        version: link:../../packages/config
+      '@sbf/logger':
+        specifier: workspace:*
+        version: link:../../packages/logger
+
+  apps/gateway:
+    dependencies:
+      '@sbf/config':
+        specifier: workspace:*
+        version: link:../../packages/config
+      '@sbf/logger':
+        specifier: workspace:*
+        version: link:../../packages/logger
+
+  packages/config: {}
+
+  packages/contracts: {}
+
+  packages/database: {}
+
+  packages/logger: {}
+
+  packages/utils: {}
