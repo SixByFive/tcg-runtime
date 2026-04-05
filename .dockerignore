@@ -2,8 +2,6 @@ node_modules
 .pnpm-store
 .git
 .gitignore
-.env
-env/.env.*
 coverage
 reports
 dist

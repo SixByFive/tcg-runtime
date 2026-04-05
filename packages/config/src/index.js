@@ -5,20 +5,12 @@ import dotenv from 'dotenv';
 
 function loadEnvFile(filePath) {
   if (fs.existsSync(filePath)) {
-    dotenv.config({ path: filePath, override: false });
+    dotenv.config({ path: filePath, override: true });
   }
 }
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
-/**
- * packages/config/src/index.js
- * -> packages/config/src
- * -> packages/config
- * -> packages
- * -> repo root
- */
 const repoRoot = path.resolve(__dirname, '../../..');
 const envDir = path.join(repoRoot, 'env');
 
@@ -27,10 +19,20 @@ const serviceName =
   process.env.npm_package_name?.replace('@sbf/', '') ||
   '';
 
+const envProfile = process.env.ENV_PROFILE || '';
+
 loadEnvFile(path.join(envDir, '.env.shared'));
 
 if (serviceName) {
   loadEnvFile(path.join(envDir, `.env.${serviceName}`));
+}
+
+if (envProfile) {
+  loadEnvFile(path.join(envDir, `.env.shared.${envProfile}`));
+
+  if (serviceName) {
+    loadEnvFile(path.join(envDir, `.env.${serviceName}.${envProfile}`));
+  }
 }
 
 export function getServicePort(envKey, fallbackPort) {

@@ -3,5 +3,13 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "main": "src/index.js"
+  "main": "./src/index.js",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "dependencies": {
+    "@sbf/config": "workspace:*",
+    "sequelize": "^6.37.8",
+    "mysql2": "^3.20.0"
+  }
 }

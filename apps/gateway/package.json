@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@sbf/config": "workspace:*",
-    "@sbf/logger": "workspace:*"
+    "@sbf/logger": "workspace:*",
+    "@sbf/database": "workspace:*"
   }
 }

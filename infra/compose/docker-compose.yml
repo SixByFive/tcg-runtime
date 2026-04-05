@@ -1,4 +1,4 @@
-version: "3.9"
+name: sbf-tcg-runtime
 
 services:
   gateway:
@@ -7,6 +7,7 @@ services:
       dockerfile: apps/gateway/Dockerfile
     environment:
       SERVICE_NAME: gateway
+      ENV_PROFILE: docker
     ports:
       - "4010:4010"
     healthcheck:
@@ -21,6 +22,7 @@ services:
       dockerfile: apps/auth-service/Dockerfile
     environment:
       SERVICE_NAME: auth-service
+      ENV_PROFILE: docker
     ports:
       - "4011:4011"
     healthcheck:
@@ -35,6 +37,7 @@ services:
       dockerfile: apps/catalog-service/Dockerfile
     environment:
       SERVICE_NAME: catalog-service
+      ENV_PROFILE: docker
     ports:
       - "4012:4012"
     healthcheck:

@@ -7,13 +7,18 @@
   "scripts": {
     "dev": "pnpm -r --parallel dev",
     "dev:core": "pnpm --parallel --filter @sbf/gateway --filter @sbf/auth-service --filter @sbf/catalog-service dev",
+    "dev:gateway": "pnpm --filter @sbf/gateway dev",
     "dev:all": "pnpm --parallel --filter @sbf/gateway --filter @sbf/auth-service --filter @sbf/catalog-service --filter @sbf/collections-service --filter @sbf/marketplace-service --filter @sbf/trading-service --filter @sbf/notifications-service --filter @sbf/media-service --filter @sbf/realtime-service --filter @sbf/payments-service --filter @sbf/worker-service dev",
     "health": "node infra/scripts/health-all.mjs",
     "health:core": "node infra/scripts/health-all.mjs --only=gateway,auth-service,catalog-service --strict",
     "health:strict": "node infra/scripts/health-all.mjs --strict"
   },
   "dependencies": {
+    "@apollo/server": "^5.5.0",
     "cross-env": "^10.1.0",
-    "dotenv": "^17.4.0"
+    "dotenv": "^17.4.0",
+    "graphql": "^16.13.2",
+    "mysql2": "^3.20.0",
+    "sequelize": "^6.37.8"
   }
 }

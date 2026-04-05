@@ -1,13 +1,20 @@
-/**
- * Shared database config placeholder.
- * Later this is where Sequelize init will live.
- */
 import { getSharedConfig } from '@sbf/config';
+import { getSequelize } from './sequelize.js';
+import { checkDatabaseHealth } from './health.js';
 
 export function getDatabaseConfig() {
   const config = getSharedConfig();
 
   return {
-    url: config.databaseUrl,
+    host: config.db.host,
+    port: config.db.port,
+    user: config.db.user,
+    pass: config.db.pass,
+    name: config.db.name
   };
 }
+
+export {
+  getSequelize,
+  checkDatabaseHealth
+};
