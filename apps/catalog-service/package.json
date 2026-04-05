@@ -5,8 +5,8 @@
   "type": "module",
   "main": "src/index.js",
   "scripts": {
-    "dev": "node --watch src/index.js",
-    "start": "node src/index.js"
+    "dev": "cross-env SERVICE_NAME=catalog-service node --watch src/index.js",
+    "start": "cross-env SERVICE_NAME=catalog-service node src/index.js"
   },
   "dependencies": {
     "@sbf/config": "workspace:*",

@@ -1,0 +1,44 @@
+version: "3.9"
+
+services:
+  gateway:
+    build:
+      context: ../..
+      dockerfile: apps/gateway/Dockerfile
+    environment:
+      SERVICE_NAME: gateway
+    ports:
+      - "4010:4010"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:4010/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  auth-service:
+    build:
+      context: ../..
+      dockerfile: apps/auth-service/Dockerfile
+    environment:
+      SERVICE_NAME: auth-service
+    ports:
+      - "4011:4011"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:4011/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  catalog-service:
+    build:
+      context: ../..
+      dockerfile: apps/catalog-service/Dockerfile
+    environment:
+      SERVICE_NAME: catalog-service
+    ports:
+      - "4012:4012"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:4012/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5

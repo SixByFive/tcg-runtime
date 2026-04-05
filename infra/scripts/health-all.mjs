@@ -1,7 +1,7 @@
 const allServices = [
   { name: 'gateway', url: 'http://localhost:4010/health' },
-  { name: 'auth-service', url: 'http://localhost:4001/health' },
-  { name: 'catalog-service', url: 'http://localhost:4002/health' },
+  { name: 'auth-service', url: 'http://localhost:4011/health' },
+  { name: 'catalog-service', url: 'http://localhost:4012/health' },
   { name: 'collections-service', url: 'http://localhost:4013/health' },
   { name: 'marketplace-service', url: 'http://localhost:4014/health' },
   { name: 'trading-service', url: 'http://localhost:4015/health' },

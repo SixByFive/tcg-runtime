@@ -1,0 +1,15 @@
+{
+  "name": "@sbf/payments-service",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "dev": "cross-env SERVICE_NAME=payments-service node --watch src/index.js",
+    "start": "cross-env SERVICE_NAME=payments-service node src/index.js"
+  },
+  "dependencies": {
+    "@sbf/config": "workspace:*",
+    "@sbf/logger": "workspace:*"
+  }
+}
