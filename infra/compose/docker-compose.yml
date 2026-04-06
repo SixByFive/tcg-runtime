@@ -3,6 +3,7 @@ name: sbf-tcg-runtime
 services:
   redis:
     image: redis:7-alpine
+    restart: unless-stopped
     ports:
       - "6379:6379"
     volumes:
@@ -23,7 +24,9 @@ services:
     ports:
       - "4010:4010"
     depends_on:
-      redis:
+      auth-service:
+        condition: service_healthy
+      catalog-service:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:4010/health"]
@@ -56,6 +59,7 @@ services:
     environment:
       SERVICE_NAME: catalog-service
       ENV_PROFILE: docker
+      ADMIN_API_KEY: change_me_admin_key
     ports:
       - "4012:4012"
     healthcheck:

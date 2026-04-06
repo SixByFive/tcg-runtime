@@ -1,9 +1,9 @@
 FROM node:20-alpine
 
-WORKDIR /app
+WORKDIR /workspace
 
 COPY package.json pnpm-workspace.yaml ./
-COPY apps ./apps
+COPY apps/catalog-service ./apps/catalog-service
 COPY packages ./packages
 COPY env ./env
 
