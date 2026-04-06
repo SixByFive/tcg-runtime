@@ -1,26 +1,20 @@
+import express from 'express';
 import http from 'node:http';
 import { getServicePort } from '@sbf/config';
 import { createLogger } from '@sbf/logger';
 
 const serviceName = 'catalog-service';
 const logger = createLogger(serviceName);
-const port = getServicePort('CATALOG_SERVICE_PORT', 4002);
+const port = getServicePort('CATALOG_SERVICE_PORT', 4012);
 
-const server = http.createServer((req, res) => {
-  if (req.url === '/health') {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ status: 'ok', service: serviceName }));
-    return;
-  }
+const app = express();
+app.use(express.json());
 
-  res.writeHead(200, { 'Content-Type': 'application/json' });
-  res.end(
-    JSON.stringify({
-      message: 'Catalog service is running',
-      service: serviceName
-    })
-  );
+app.get('/health', (_req, res) => {
+  res.status(200).json({ status: 'ok', service: serviceName });
 });
+
+const server = http.createServer(app);
 
 server.listen(port, () => {
   logger.info(`Listening on port ${port}`);

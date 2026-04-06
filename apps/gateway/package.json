@@ -9,8 +9,12 @@
     "start": "cross-env SERVICE_NAME=gateway node src/index.js"
   },
   "dependencies": {
+    "@apollo/server": "^5.5.0",
+    "@as-integrations/express5": "^1.1.2",
     "@sbf/config": "workspace:*",
+    "@sbf/database": "workspace:*",
     "@sbf/logger": "workspace:*",
-    "@sbf/database": "workspace:*"
+    "express": "^5.1.0",
+    "graphql": "^16.13.2"
   }
 }

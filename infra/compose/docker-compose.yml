@@ -1,23 +1,6 @@
 name: sbf-tcg-runtime
 
 services:
-  mysql:
-    image: mysql:8.0
-    environment:
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: sixbyfive_tcg
-      MYSQL_USER: tcg_user
-      MYSQL_PASSWORD: tcg_pass
-    ports:
-      - "3306:3306"
-    volumes:
-      - mysql_data:/var/lib/mysql
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-
   redis:
     image: redis:7-alpine
     ports:
@@ -40,8 +23,6 @@ services:
     ports:
       - "4010:4010"
     depends_on:
-      mysql:
-        condition: service_healthy
       redis:
         condition: service_healthy
     healthcheck:
@@ -60,8 +41,6 @@ services:
     ports:
       - "4011:4011"
     depends_on:
-      mysql:
-        condition: service_healthy
       redis:
         condition: service_healthy
     healthcheck:
@@ -79,9 +58,6 @@ services:
       ENV_PROFILE: docker
     ports:
       - "4012:4012"
-    depends_on:
-      mysql:
-        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:4012/health"]
       interval: 10s
@@ -89,5 +65,4 @@ services:
       retries: 5
 
 volumes:
-  mysql_data:
   redis_data:

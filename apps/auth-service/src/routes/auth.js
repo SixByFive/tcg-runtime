@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 import crypto from 'node:crypto';
 import { Op } from 'sequelize';
 import { OAuth2Client } from 'google-auth-library';
@@ -49,11 +49,15 @@ const logger = createLogger('auth-service:routes');
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 const router = Router();
 
-// Per-route rate limiters (on top of the global limit in index.js)
 const registerLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 10, standardHeaders: true, legacyHeaders: false });
 const resetLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 5, standardHeaders: true, legacyHeaders: false });
 
-// Strips sensitive fields before sending a user object to the client
+// Mobile clients send X-Client-Type: mobile and receive tokens in the response body.
+// Web clients get HttpOnly cookies and no tokens in the body.
+function isMobile(req) {
+  return req.headers['x-client-type'] === 'mobile';
+}
+
 function safeUser(user) {
   return {
     id: user.id,
@@ -67,13 +71,20 @@ function safeUser(user) {
   };
 }
 
-// Issues access + refresh tokens and sets HttpOnly cookies
-async function issueAuth(res, user) {
+// Issues tokens. For mobile: returns { accessToken, refreshToken } to merge into response body.
+// For web: sets HttpOnly cookies and returns {}.
+async function issueAuth(req, res, user) {
   const payload = { sub: user.id, username: user.username, email: user.email, isAdmin: user.isAdmin };
   const accessToken = signAccessToken(payload);
   const refreshToken = await createSession(user.id);
-  setAuthCookies(res, { accessToken, refreshToken });
   await user.update({ lastLogin: new Date() });
+
+  if (isMobile(req)) {
+    return { accessToken, refreshToken };
+  }
+
+  setAuthCookies(res, { accessToken, refreshToken });
+  return {};
 }
 
 // ─── Register ────────────────────────────────────────────────────────────────
@@ -101,22 +112,20 @@ router.post('/register', registerLimiter, async (req, res) => {
 
   const hashedPassword = await bcrypt.hash(password, 12);
   const verifyToken = crypto.randomBytes(32).toString('hex');
-  const verifyTokenExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
   const user = await User.create({
     username,
     email: email.toLowerCase(),
     password: hashedPassword,
     verifyToken,
-    verifyTokenExpiry,
+    verifyTokenExpiry: new Date(Date.now() + 24 * 60 * 60 * 1000),
   });
 
-  // Fire-and-forget — don't fail registration if email is misconfigured
   sendVerificationEmail(user, verifyToken).catch(() => {});
   sendWelcomeEmail(user).catch(() => {});
 
-  await issueAuth(res, user);
-  return res.status(201).json({ user: safeUser(user) });
+  const tokens = await issueAuth(req, res, user);
+  return res.status(201).json({ ...tokens, user: safeUser(user) });
 });
 
 // ─── Login ───────────────────────────────────────────────────────────────────
@@ -155,30 +164,36 @@ router.post('/login', async (req, res) => {
 
   if (user.twoFactorEnabled) {
     const pendingToken = signPendingToken(user.id);
+    if (isMobile(req)) {
+      // Mobile holds the pending token itself and sends it back in the challenge body
+      return res.json({ requiresTwoFactor: true, pendingToken });
+    }
     setPendingCookie(res, pendingToken);
     return res.json({ requiresTwoFactor: true });
   }
 
-  await issueAuth(res, user);
-  return res.json({ user: safeUser(user) });
+  const tokens = await issueAuth(req, res, user);
+  return res.json({ ...tokens, user: safeUser(user) });
 });
 
 // ─── Logout ──────────────────────────────────────────────────────────────────
 
 router.post('/logout', async (req, res) => {
-  const refreshToken = req.cookies?.sbf_refresh;
+  // Mobile sends refreshToken in body; web sends it via cookie
+  const refreshToken = req.body?.refreshToken ?? req.cookies?.sbf_refresh;
   if (refreshToken) {
     const userId = await validateSession(refreshToken);
     await revokeSession(refreshToken, userId);
   }
-  clearAuthCookies(res);
+  if (!isMobile(req)) clearAuthCookies(res);
   return res.status(204).send();
 });
 
 // ─── Refresh ─────────────────────────────────────────────────────────────────
 
 router.post('/refresh', async (req, res) => {
-  const oldToken = req.cookies?.sbf_refresh;
+  // Mobile sends refreshToken in body; web sends it via cookie
+  const oldToken = req.body?.refreshToken ?? req.cookies?.sbf_refresh;
   if (!oldToken) return res.status(401).json({ error: 'No refresh token' });
 
   const userId = await validateSession(oldToken);
@@ -187,17 +202,19 @@ router.post('/refresh', async (req, res) => {
   const user = await User.findByPk(userId);
   if (!user || user.isBanned) {
     await revokeSession(oldToken, userId);
-    clearAuthCookies(res);
+    if (!isMobile(req)) clearAuthCookies(res);
     return res.status(401).json({ error: 'Session invalid' });
   }
 
   const newRefreshToken = await rotateSession(oldToken, userId);
   const accessToken = signAccessToken({
-    sub: user.id,
-    username: user.username,
-    email: user.email,
-    isAdmin: user.isAdmin,
+    sub: user.id, username: user.username, email: user.email, isAdmin: user.isAdmin,
   });
+
+  if (isMobile(req)) {
+    return res.json({ accessToken, refreshToken: newRefreshToken, user: safeUser(user) });
+  }
+
   setAuthCookies(res, { accessToken, refreshToken: newRefreshToken });
   return res.json({ user: safeUser(user) });
 });
@@ -233,7 +250,6 @@ router.post('/google', async (req, res) => {
   });
 
   if (!user) {
-    // Generate a unique username from their Google display name
     const base = (name ?? 'user').replace(/[^a-zA-Z0-9_]/g, '').slice(0, 24) || 'user';
     let username = base;
     let suffix = 1;
@@ -248,8 +264,8 @@ router.post('/google', async (req, res) => {
 
   if (user.isBanned) return res.status(403).json({ error: 'Your account has been suspended' });
 
-  await issueAuth(res, user);
-  return res.json({ user: safeUser(user) });
+  const tokens = await issueAuth(req, res, user);
+  return res.json({ ...tokens, user: safeUser(user) });
 });
 
 // ─── 2FA Setup ───────────────────────────────────────────────────────────────
@@ -266,7 +282,7 @@ router.post('/2fa/setup', requireAuth, async (req, res) => {
   return res.json({ otpauthUrl, qrCodeDataURL });
 });
 
-// ─── 2FA Verify (confirms setup and enables 2FA) ──────────────────────────────
+// ─── 2FA Verify (confirms setup and enables 2FA) ─────────────────────────────
 
 router.post('/2fa/verify', requireAuth, async (req, res) => {
   const { token } = req.body ?? {};
@@ -295,15 +311,16 @@ router.post('/2fa/verify', requireAuth, async (req, res) => {
 // ─── 2FA Challenge (completes login when 2FA is required) ────────────────────
 
 router.post('/2fa/challenge', async (req, res) => {
-  const { token } = req.body ?? {};
-  const pendingCookie = req.cookies?.sbf_pending;
+  const { token, pendingToken: bodyPendingToken } = req.body ?? {};
+  // Mobile sends pendingToken in body; web sends it via cookie
+  const rawPending = bodyPendingToken ?? req.cookies?.sbf_pending;
 
-  if (!pendingCookie) return res.status(401).json({ error: 'No pending 2FA session' });
+  if (!rawPending) return res.status(401).json({ error: 'No pending 2FA session' });
   if (!token) return res.status(400).json({ error: 'token is required' });
 
   let payload;
   try {
-    payload = verifyPendingToken(pendingCookie);
+    payload = verifyPendingToken(rawPending);
   } catch {
     return res.status(401).json({ error: 'Pending session expired, please log in again' });
   }
@@ -325,10 +342,10 @@ router.post('/2fa/challenge', async (req, res) => {
   }
 
   await clearTotpBrute(user.id);
-  res.clearCookie('sbf_pending', { path: '/' });
+  if (!isMobile(req)) res.clearCookie('sbf_pending', { path: '/' });
 
-  await issueAuth(res, user);
-  return res.json({ user: safeUser(user) });
+  const tokens = await issueAuth(req, res, user);
+  return res.json({ ...tokens, user: safeUser(user) });
 });
 
 // ─── Disable 2FA ─────────────────────────────────────────────────────────────
@@ -360,7 +377,6 @@ router.post('/password/forgot', resetLimiter, async (req, res) => {
   try {
     await checkResetBrute(normalizedEmail);
   } catch {
-    // Return 200 to prevent email enumeration
     return res.json({ message: 'If that email exists, a reset link has been sent' });
   }
 
@@ -373,7 +389,6 @@ router.post('/password/forgot', resetLimiter, async (req, res) => {
     sendPasswordResetEmail(user, resetToken).catch(() => {});
   }
 
-  // Always return the same response to prevent enumeration
   return res.json({ message: 'If that email exists, a reset link has been sent' });
 });
 
@@ -392,9 +407,8 @@ router.post('/password/reset', async (req, res) => {
   const hashedPassword = await bcrypt.hash(password, 12);
   await user.update({ password: hashedPassword, resetToken: null, resetTokenExpiry: null });
 
-  // Revoke all sessions — user must log in again with the new password
   await revokeAllSessions(user.id);
-  clearAuthCookies(res);
+  if (!isMobile(req)) clearAuthCookies(res);
 
   return res.json({ success: true });
 });
@@ -418,11 +432,11 @@ router.put('/password', requireAuth, async (req, res) => {
   const hashedPassword = await bcrypt.hash(newPassword, 12);
   await user.update({ password: hashedPassword });
 
-  // Revoke all other sessions and issue fresh tokens for the current session
+  // Revoke all sessions and reissue for the current client
   await revokeAllSessions(user.id);
-  await issueAuth(res, user);
+  const tokens = await issueAuth(req, res, user);
 
-  return res.json({ success: true });
+  return res.json({ ...tokens, success: true });
 });
 
 // ─── Verify Email ─────────────────────────────────────────────────────────────

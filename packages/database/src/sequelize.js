@@ -25,7 +25,7 @@ export function getSequelize() {
             port: config.db.port, 
             dialect: 'mysql',
             logging: false, 
-            derfine: {
+            define: {
                 freezeTableName: true, 
             }
         }
