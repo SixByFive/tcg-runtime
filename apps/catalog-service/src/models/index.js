@@ -7,6 +7,7 @@ import { definePriceDaily } from './PriceDaily.js';
 import { definePriceLatest } from './PriceLatest.js';
 import { definePriceRollup } from './PriceRollup.js';
 import { defineSchedulerTask } from './SchedulerTask.js';
+import { definePriceAlert } from './PriceAlert.js';
 
 export let Set;
 export let Card;
@@ -16,6 +17,7 @@ export let PriceDaily;
 export let PriceLatest;
 export let PriceRollup;
 export let SchedulerTask;
+export let PriceAlert;
 
 export async function initModels() {
   const sequelize = getSequelize();
@@ -28,6 +30,7 @@ export async function initModels() {
   PriceLatest = definePriceLatest(sequelize);
   PriceRollup = definePriceRollup(sequelize);
   SchedulerTask = defineSchedulerTask(sequelize);
+  PriceAlert = definePriceAlert(sequelize);
 
   // Associations
   Set.hasMany(Card, { foreignKey: 'set_code', sourceKey: 'code' });
@@ -40,5 +43,6 @@ export async function initModels() {
   } else {
     // In production, only create new tables that don't exist yet (never alter existing ones)
     await SchedulerTask.sync({ force: false });
+    await PriceAlert.sync({ force: false });
   }
 }

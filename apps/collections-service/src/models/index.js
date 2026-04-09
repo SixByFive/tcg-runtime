@@ -1,0 +1,52 @@
+import { getSequelize } from '@sbf/database';
+import { defineCard } from './Card.js';
+import { defineCollection } from './Collection.js';
+import { defineWishlist } from './Wishlist.js';
+import { defineBinder } from './Binder.js';
+import { defineBinderPage } from './BinderPage.js';
+import { defineBinderSlot } from './BinderSlot.js';
+
+export let Card;
+export let Collection;
+export let Wishlist;
+export let Binder;
+export let BinderPage;
+export let BinderSlot;
+export let sequelize;
+
+let initialized = false;
+
+export async function initModels() {
+  if (initialized) return;
+
+  sequelize = getSequelize();
+
+  Card = defineCard(sequelize);
+  Collection = defineCollection(sequelize);
+  Wishlist = defineWishlist(sequelize);
+  Binder = defineBinder(sequelize);
+  BinderPage = defineBinderPage(sequelize);
+  BinderSlot = defineBinderSlot(sequelize);
+
+  // Associations to Card use constraints: false because Card is a read-only reference
+  // to the catalog-service's m_cards table. We never want Sequelize to create or
+  // enforce a DB-level FK here — existing cardId values may predate catalog ingestion.
+  Collection.belongsTo(Card, { foreignKey: 'cardId', targetKey: 'id', as: 'card', constraints: false });
+  Wishlist.belongsTo(Card, { foreignKey: 'cardId', targetKey: 'id', as: 'card', constraints: false });
+  Binder.hasMany(BinderPage, { foreignKey: 'binderId', as: 'pages' });
+  BinderPage.belongsTo(Binder, { foreignKey: 'binderId' });
+  BinderPage.hasMany(BinderSlot, { foreignKey: 'pageId', as: 'slots' });
+  BinderSlot.belongsTo(BinderPage, { foreignKey: 'pageId' });
+  BinderSlot.belongsTo(Card, { foreignKey: 'cardId', targetKey: 'id', as: 'card', constraints: false });
+
+  if (process.env.NODE_ENV === 'development') {
+    // Sync only our writable tables, never the catalog's m_cards
+    await Collection.sync({ alter: true });
+    await Wishlist.sync({ alter: true });
+    await Binder.sync({ alter: true });
+    await BinderPage.sync({ alter: true });
+    await BinderSlot.sync({ alter: true });
+  }
+
+  initialized = true;
+}

@@ -26,6 +26,8 @@ services:
     depends_on:
       auth-service:
         condition: service_healthy
+      user-service:
+        condition: service_healthy
       catalog-service:
         condition: service_healthy
     healthcheck:
@@ -48,6 +50,21 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:4011/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  user-service:
+    build:
+      context: ../..
+      dockerfile: apps/user-service/Dockerfile
+    environment:
+      SERVICE_NAME: user-service
+      ENV_PROFILE: docker
+    ports:
+      - "4021:4021"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:4021/health"]
       interval: 10s
       timeout: 3s
       retries: 5

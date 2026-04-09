@@ -1,5 +1,6 @@
 import express from 'express';
 import { ApolloServer } from '@apollo/server';
+import { ApolloServerPluginLandingPageLocalDefault } from '@apollo/server/plugin/landingPage/default';
 import { expressMiddleware } from '@as-integrations/express5';
 import { typeDefs } from './graphql/schema.js';
 import { resolvers } from './graphql/resolvers.js';
@@ -63,6 +64,10 @@ export async function createApp({ logger }) {
   const apolloServer = new ApolloServer({
     typeDefs,
     resolvers,
+    introspection: true,
+    plugins: [
+      ApolloServerPluginLandingPageLocalDefault({ embed: true }),
+    ],
     formatError: (error) => {
       logger.warn(`GraphQL Error: ${error.message}`);
       return error;

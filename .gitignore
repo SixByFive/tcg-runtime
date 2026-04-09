@@ -136,3 +136,4 @@ dist
 .pnp.*
 structure.txt
 /env
+/.claude

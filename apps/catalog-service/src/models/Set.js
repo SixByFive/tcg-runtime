@@ -16,6 +16,11 @@ export function defineSet(sequelize) {
     set_symbol: DataTypes.TEXT,
     source_at: DataTypes.DATE,
     generator_version: DataTypes.STRING(64),
+    enabled: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: true,
+      allowNull: false,
+    },
     updated_at: {
       type: DataTypes.DATE,
       defaultValue: DataTypes.NOW,

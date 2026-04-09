@@ -38,6 +38,12 @@ importers:
 
   apps/auth-service:
     dependencies:
+      '@sbf/auth':
+        specifier: workspace:*
+        version: link:../../packages/auth
+      '@sbf/cache':
+        specifier: workspace:*
+        version: link:../../packages/cache
       '@sbf/config':
         specifier: workspace:*
         version: link:../../packages/config
@@ -65,9 +71,6 @@ importers:
       helmet:
         specifier: ^8.0.0
         version: 8.1.0
-      ioredis:
-        specifier: ^5.4.2
-        version: 5.10.1
       jsonwebtoken:
         specifier: ^9.0.2
         version: 9.0.3
@@ -86,18 +89,63 @@ importers:
       '@sbf/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@sbf/database':
+        specifier: workspace:*
+        version: link:../../packages/database
       '@sbf/logger':
         specifier: workspace:*
         version: link:../../packages/logger
+      cross-env:
+        specifier: ^7.0.3
+        version: 7.0.3
+      express:
+        specifier: ^4.21.2
+        version: 4.22.1
+      express-rate-limit:
+        specifier: ^7.5.0
+        version: 7.5.1(express@4.22.1)
+      helmet:
+        specifier: ^8.0.0
+        version: 8.1.0
+      jsonwebtoken:
+        specifier: ^9.0.2
+        version: 9.0.3
+      node-cron:
+        specifier: ^3.0.3
+        version: 3.0.3
+      uuid:
+        specifier: ^11.0.5
+        version: 11.1.0
 
   apps/collections-service:
     dependencies:
+      '@sbf/auth':
+        specifier: workspace:*
+        version: link:../../packages/auth
       '@sbf/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@sbf/database':
+        specifier: workspace:*
+        version: link:../../packages/database
       '@sbf/logger':
         specifier: workspace:*
         version: link:../../packages/logger
+      cookie-parser:
+        specifier: ^1.4.7
+        version: 1.4.7
+      express:
+        specifier: ^4.21.2
+        version: 4.22.1
+      express-rate-limit:
+        specifier: ^7.5.0
+        version: 7.5.1(express@4.22.1)
+      helmet:
+        specifier: ^8.0.0
+        version: 8.1.0
+      sequelize:
+        specifier: ^6.37.3
+        version: 6.37.8(mysql2@3.20.0(@types/node@25.5.2))
 
   apps/gateway:
     dependencies:
@@ -107,6 +155,9 @@ importers:
       '@as-integrations/express5':
         specifier: ^1.1.2
         version: 1.1.2(@apollo/server@5.5.0(graphql@16.13.2))(express@5.2.1)
+      '@sbf/auth':
+        specifier: workspace:*
+        version: link:../../packages/auth
       '@sbf/config':
         specifier: workspace:*
         version: link:../../packages/config
@@ -177,6 +228,39 @@ importers:
         specifier: workspace:*
         version: link:../../packages/logger
 
+  apps/user-service:
+    dependencies:
+      '@sbf/auth':
+        specifier: workspace:*
+        version: link:../../packages/auth
+      '@sbf/config':
+        specifier: workspace:*
+        version: link:../../packages/config
+      '@sbf/database':
+        specifier: workspace:*
+        version: link:../../packages/database
+      '@sbf/logger':
+        specifier: workspace:*
+        version: link:../../packages/logger
+      bcryptjs:
+        specifier: ^2.4.3
+        version: 2.4.3
+      cookie-parser:
+        specifier: ^1.4.7
+        version: 1.4.7
+      cross-env:
+        specifier: ^7.0.3
+        version: 7.0.3
+      express:
+        specifier: ^4.21.2
+        version: 4.22.1
+      express-rate-limit:
+        specifier: ^7.5.0
+        version: 7.5.1(express@4.22.1)
+      helmet:
+        specifier: ^8.0.0
+        version: 8.1.0
+
   apps/worker-service:
     dependencies:
       '@sbf/config':
@@ -185,6 +269,24 @@ importers:
       '@sbf/logger':
         specifier: workspace:*
         version: link:../../packages/logger
+
+  packages/auth:
+    dependencies:
+      jsonwebtoken:
+        specifier: ^9.0.2
+        version: 9.0.3
+
+  packages/cache:
+    dependencies:
+      '@sbf/config':
+        specifier: workspace:*
+        version: link:../config
+      '@sbf/logger':
+        specifier: workspace:*
+        version: link:../logger
+      ioredis:
+        specifier: ^5.6.1
+        version: 5.10.1
 
   packages/config: {}
 
@@ -504,6 +606,11 @@ packages:
   cross-env@10.1.0:
     resolution: {integrity: sha512-GsYosgnACZTADcmEyJctkJIoqAhHjttw7RsFrVoJNXbsWWqaq6Ym+7kZjq6mS45O0jij6vtiReppKQEtqWy6Dw==}
     engines: {node: '>=20'}
+    hasBin: true
+
+  cross-env@7.0.3:
+    resolution: {integrity: sha512-+/HKd6EgcQCJGh2PSjZuUitQBQynKor4wrFbRg4DtAgS1aWO+gU52xpH7M9ScGgXSYmAVS9bIJ8EzuaGw0oNAw==}
+    engines: {node: '>=10.14', npm: '>=6', yarn: '>=1'}
     hasBin: true
 
   cross-inspect@1.0.1:
@@ -914,6 +1021,10 @@ packages:
   negotiator@1.0.0:
     resolution: {integrity: sha512-8Ofs/AUQh8MaEcrlq5xOX0CQ9ypTF5dl78mjlMNfOK08fzpgTHQRQPBxcPlEtIw0yRpws+Zo/3r+5WRby7u3Gg==}
     engines: {node: '>= 0.6'}
+
+  node-cron@3.0.3:
+    resolution: {integrity: sha512-dOal67//nohNgYWb+nWmg5dkFdIwDm8EpeGYMekPMrngV3637lqnX0lbUcCtgibHTz6SEz7DAIjKvKDFYCnO1A==}
+    engines: {node: '>=6.0.0'}
 
   node-fetch@2.7.0:
     resolution: {integrity: sha512-c4FRfUm/dbcWZ7U+1Wq0AwCyFL+3nt2bEw05wfxSz+DWpWsitgmSgYmy2dQdWyKC1694ELPqMs/YzUSNozLt8A==}
@@ -1589,6 +1700,10 @@ snapshots:
       '@epic-web/invariant': 1.0.0
       cross-spawn: 7.0.6
 
+  cross-env@7.0.3:
+    dependencies:
+      cross-spawn: 7.0.6
+
   cross-inspect@1.0.1:
     dependencies:
       tslib: 2.8.1
@@ -2041,6 +2156,10 @@ snapshots:
   negotiator@0.6.3: {}
 
   negotiator@1.0.0: {}
+
+  node-cron@3.0.3:
+    dependencies:
+      uuid: 8.3.2
 
   node-fetch@2.7.0:
     dependencies:

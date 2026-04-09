@@ -64,8 +64,10 @@ function safeUser(user) {
     username: user.username,
     email: user.email,
     isAdmin: user.isAdmin,
+    chatBanned: user.chatBanned,
     emailVerified: user.emailVerified,
     twoFactorEnabled: user.twoFactorEnabled,
+    restrictionLevel: user.restrictionLevel,
     lastLogin: user.lastLogin,
     createdAt: user.createdAt,
   };
@@ -90,7 +92,7 @@ async function issueAuth(req, res, user) {
 // ─── Register ────────────────────────────────────────────────────────────────
 
 router.post('/register', registerLimiter, async (req, res) => {
-  const { username, email, password } = req.body ?? {};
+  const { username, email, password, referrerId } = req.body ?? {};
 
   if (!username || !email || !password) {
     return res.status(400).json({ error: 'username, email and password are required' });
@@ -119,6 +121,7 @@ router.post('/register', registerLimiter, async (req, res) => {
     password: hashedPassword,
     verifyToken,
     verifyTokenExpiry: new Date(Date.now() + 24 * 60 * 60 * 1000),
+    ...(referrerId ? { referrerId } : {}),
   });
 
   sendVerificationEmail(user, verifyToken).catch(() => {});

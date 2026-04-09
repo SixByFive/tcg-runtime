@@ -5,6 +5,7 @@ import { ingestSet } from '../jobs/ingestSet.job.js';
 import { collectPrices } from '../jobs/collectPrices.job.js';
 import { fxDaily } from '../jobs/fxDaily.job.js';
 import { rebuildPriceRollups } from '../jobs/rollup.job.js';
+import { Set } from '../models/index.js';
 
 const router = Router();
 
@@ -129,6 +130,18 @@ router.post('/jobs/rollups', async (req, res) => {
     const { scope, set, cardId, asOf, batchSize } = req.body;
     const result = await rebuildPriceRollups({ scope: scope || 'all', set, cardId, asOf, batchSize });
     res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /admin/sets/:code/toggle — enable or disable a set
+router.post('/sets/:code/toggle', async (req, res) => {
+  try {
+    const set = await Set.findByPk(req.params.code);
+    if (!set) return res.status(404).json({ error: 'Set not found' });
+    await set.update({ enabled: !set.enabled });
+    res.json({ code: set.code, enabled: set.enabled });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

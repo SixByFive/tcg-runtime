@@ -100,6 +100,7 @@ async function migrateSets(conn) {
         set_symbol        TEXT,
         source_at         DATETIME,
         generator_version VARCHAR(64),
+        enabled           TINYINT(1) NOT NULL DEFAULT 1,
         updated_at        DATETIME DEFAULT CURRENT_TIMESTAMP,
         INDEX idx_abbreviation (abbreviation)
       )`,
@@ -405,6 +406,13 @@ async function main() {
     await migratePriceDaily(conn);
     await migratePriceRollups(conn);
     await createSchedulerTasks(conn);
+
+    // Patch: add enabled column to m_sets if missing (for already-migrated tables)
+    if (!await columnExists(conn, 'm_sets', 'enabled')) {
+      log('m_sets — adding enabled column …');
+      await conn.query(`ALTER TABLE m_sets ADD COLUMN enabled TINYINT(1) NOT NULL DEFAULT 1`);
+      ok('m_sets — enabled column added');
+    }
 
     await conn.query('SET FOREIGN_KEY_CHECKS = 1');
 

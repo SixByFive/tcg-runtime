@@ -79,6 +79,35 @@ export default function defineUser(sequelize) {
         type: DataTypes.DATE,
         allowNull: true,
       },
+      chatBanned: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
+        allowNull: false,
+      },
+      referrerId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
+      // Age / parental-control fields
+      dob: {
+        type: DataTypes.DATEONLY,
+        allowNull: true,
+      },
+      restrictionLevel: {
+        type: DataTypes.TINYINT,
+        defaultValue: 0,
+        allowNull: false,
+        comment: '0=none, 1=teen, 2=child',
+      },
+      parentEmail: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
+      parentApproved: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
+        allowNull: false,
+      },
     },
     {
       tableName: 'users',
@@ -88,6 +117,7 @@ export default function defineUser(sequelize) {
         { fields: ['resetToken'] },
         { fields: ['verifyToken'] },
         { fields: ['googleId'] },
+        { fields: ['referrerId'] },
       ],
     },
   );

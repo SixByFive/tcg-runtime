@@ -1,6 +1,7 @@
 import { extractToken } from '../middleware/extractToken.js';
 import * as authClient from '../clients/authClient.js';
 import * as catalogClient from '../clients/catalogClient.js';
+import * as collectionsClient from '../clients/collectionsClient.js';
 
 /**
  * GraphQL context builder for gateway.
@@ -19,6 +20,7 @@ export async function buildContext({ req, res, logger }) {
     clients: {
       auth: authClient,
       catalog: catalogClient,
+      collections: collectionsClient,
     },
   };
 }

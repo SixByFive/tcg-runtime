@@ -6,11 +6,13 @@
   "main": "src/index.js",
   "scripts": {
     "dev": "cross-env SERVICE_NAME=gateway node --watch src/index.js",
-    "start": "cross-env SERVICE_NAME=gateway node src/index.js"
+    "start": "cross-env SERVICE_NAME=gateway node src/index.js",
+    "schema:export": "cross-env SERVICE_NAME=gateway node scripts/export-schema.js"
   },
   "dependencies": {
     "@apollo/server": "^5.5.0",
     "@as-integrations/express5": "^1.1.2",
+    "@sbf/auth": "workspace:*",
     "@sbf/config": "workspace:*",
     "@sbf/database": "workspace:*",
     "@sbf/logger": "workspace:*",
