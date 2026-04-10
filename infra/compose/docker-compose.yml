@@ -1,16 +1,22 @@
-name: SBF TCG Runtime
+name: SBF-TCG-Runtime
+
+# Add host.docker.internal → host gateway for ALL services on Linux Docker
+x-host-gateway: &host-gateway
+  extra_hosts:
+    - "host.docker.internal:host-gateway"
 
 services:
   redis:
     container_name: Redis
     image: redis:7-alpine
     restart: unless-stopped
+    # Remove this if Redis does not need to be accessible from the host
     ports:
       - "6379:6379"
     volumes:
       - redis_data:/data
     mem_limit: 192m
-    mem_reservation: 96m
+    mem_reservation: 64m
     command: >
       redis-server
       --appendonly yes
@@ -18,11 +24,13 @@ services:
       --maxmemory-policy allkeys-lru
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
   gateway:
+    <<: *host-gateway
     container_name: Gateway
     build:
       context: ../..
@@ -46,11 +54,13 @@ services:
     mem_reservation: 128m
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:4010/health"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
 
   auth-service:
+    <<: *host-gateway
     container_name: Auth
     build:
       context: ../..
@@ -70,11 +80,13 @@ services:
     mem_reservation: 128m
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:4011/health"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
 
   user-service:
+    <<: *host-gateway
     container_name: Users
     build:
       context: ../..
@@ -91,11 +103,13 @@ services:
     mem_reservation: 128m
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:4021/health"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
 
   catalog-service:
+    <<: *host-gateway
     container_name: Catalog
     build:
       context: ../..
@@ -113,11 +127,13 @@ services:
     mem_reservation: 160m
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:4012/health"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
 
   collections-service:
+    <<: *host-gateway
     container_name: Collections
     build:
       context: ../..
@@ -134,11 +150,13 @@ services:
     mem_reservation: 128m
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:4013/health"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
 
   media-service:
+    <<: *host-gateway
     container_name: Media
     build:
       context: ../..
@@ -159,11 +177,13 @@ services:
     mem_reservation: 160m
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:4017/health"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
 
   notifications-service:
+    <<: *host-gateway
     container_name: Notifications
     build:
       context: ../..
@@ -183,11 +203,13 @@ services:
     mem_reservation: 128m
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:4016/health"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
 
   trading-service:
+    <<: *host-gateway
     container_name: Trading
     build:
       context: ../..
@@ -210,11 +232,13 @@ services:
     mem_reservation: 128m
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:4015/health"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
 
   marketplace-service:
+    <<: *host-gateway
     container_name: Marketplace
     build:
       context: ../..
@@ -236,11 +260,13 @@ services:
     mem_reservation: 128m
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:4014/health"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
 
   realtime-service:
+    <<: *host-gateway
     container_name: Realtime
     build:
       context: ../..
@@ -260,11 +286,13 @@ services:
     mem_reservation: 96m
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:4018/health"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
 
   worker-service:
+    <<: *host-gateway
     container_name: Worker
     build:
       context: ../..
@@ -287,6 +315,33 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
+      start_period: 20s
+
+  payments-service:
+    <<: *host-gateway
+    container_name: Payments
+    build:
+      context: ../..
+      dockerfile: apps/payments-service/Dockerfile
+    restart: unless-stopped
+    environment:
+      SERVICE_NAME: payments-service
+      ENV_PROFILE: docker
+      NODE_ENV: production
+      NODE_OPTIONS: --max-old-space-size=200
+    expose:
+      - "4019"
+    depends_on:
+      notifications-service:
+        condition: service_healthy
+    mem_limit: 256m
+    mem_reservation: 128m
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:4019/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
 
 volumes:
   redis_data:

@@ -8,8 +8,9 @@ COPY packages/contracts ./packages/contracts
 COPY packages/database  ./packages/database
 COPY packages/logger    ./packages/logger
 COPY apps/worker-service ./apps/worker-service
+COPY env ./env
 
-RUN npm install -g pnpm && pnpm install --frozen-lockfile --filter @sbf/worker-service...
+RUN npm install -g pnpm && pnpm install --no-frozen-lockfile --filter @sbf/worker-service...
 
 WORKDIR /app/apps/worker-service
 

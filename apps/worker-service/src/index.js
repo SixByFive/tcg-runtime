@@ -66,6 +66,6 @@ async function start() {
 }
 
 start().catch((err) => {
-  logger.error(`Failed to start: ${err.message}`);
+  logger.error(`Failed to start: ${err?.message ?? String(err)}`);
   process.exit(1);
 });
