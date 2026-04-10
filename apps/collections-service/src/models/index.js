@@ -46,6 +46,13 @@ export async function initModels() {
     await Binder.sync({ alter: true });
     await BinderPage.sync({ alter: true });
     await BinderSlot.sync({ alter: true });
+  } else {
+    // Production: create tables if missing, never alter
+    await Collection.sync({ force: false });
+    await Wishlist.sync({ force: false });
+    await Binder.sync({ force: false });
+    await BinderPage.sync({ force: false });
+    await BinderSlot.sync({ force: false });
   }
 
   initialized = true;

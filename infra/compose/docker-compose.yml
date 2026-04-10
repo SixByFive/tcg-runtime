@@ -1,13 +1,21 @@
-name: sbf-tcg-runtime
+name: SBF TCG Runtime
 
 services:
   redis:
+    container_name: Redis
     image: redis:7-alpine
     restart: unless-stopped
     ports:
       - "6379:6379"
     volumes:
       - redis_data:/data
+    mem_limit: 192m
+    mem_reservation: 96m
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory 128mb
+      --maxmemory-policy allkeys-lru
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -15,12 +23,16 @@ services:
       retries: 5
 
   gateway:
+    container_name: Gateway
     build:
       context: ../..
       dockerfile: apps/gateway/Dockerfile
+    restart: unless-stopped
     environment:
       SERVICE_NAME: gateway
       ENV_PROFILE: docker
+      NODE_ENV: production
+      NODE_OPTIONS: --max-old-space-size=200
     ports:
       - "4010:4010"
     depends_on:
@@ -30,6 +42,8 @@ services:
         condition: service_healthy
       catalog-service:
         condition: service_healthy
+    mem_limit: 256m
+    mem_reservation: 128m
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:4010/health"]
       interval: 10s
@@ -37,17 +51,23 @@ services:
       retries: 5
 
   auth-service:
+    container_name: Auth
     build:
       context: ../..
       dockerfile: apps/auth-service/Dockerfile
+    restart: unless-stopped
     environment:
       SERVICE_NAME: auth-service
       ENV_PROFILE: docker
-    ports:
-      - "4011:4011"
+      NODE_ENV: production
+      NODE_OPTIONS: --max-old-space-size=200
+    expose:
+      - "4011"
     depends_on:
       redis:
         condition: service_healthy
+    mem_limit: 256m
+    mem_reservation: 128m
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:4011/health"]
       interval: 10s
@@ -55,14 +75,20 @@ services:
       retries: 5
 
   user-service:
+    container_name: Users
     build:
       context: ../..
       dockerfile: apps/user-service/Dockerfile
+    restart: unless-stopped
     environment:
       SERVICE_NAME: user-service
       ENV_PROFILE: docker
-    ports:
-      - "4021:4021"
+      NODE_ENV: production
+      NODE_OPTIONS: --max-old-space-size=200
+    expose:
+      - "4021"
+    mem_limit: 256m
+    mem_reservation: 128m
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:4021/health"]
       interval: 10s
@@ -70,20 +96,198 @@ services:
       retries: 5
 
   catalog-service:
+    container_name: Catalog
     build:
       context: ../..
       dockerfile: apps/catalog-service/Dockerfile
+    restart: unless-stopped
     environment:
       SERVICE_NAME: catalog-service
       ENV_PROFILE: docker
       ADMIN_API_KEY: change_me_admin_key
-    ports:
-      - "4012:4012"
+      NODE_ENV: production
+      NODE_OPTIONS: --max-old-space-size=256
+    expose:
+      - "4012"
+    mem_limit: 320m
+    mem_reservation: 160m
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:4012/health"]
       interval: 10s
       timeout: 3s
       retries: 5
 
+  collections-service:
+    container_name: Collections
+    build:
+      context: ../..
+      dockerfile: apps/collections-service/Dockerfile
+    restart: unless-stopped
+    environment:
+      SERVICE_NAME: collections-service
+      ENV_PROFILE: docker
+      NODE_ENV: production
+      NODE_OPTIONS: --max-old-space-size=200
+    expose:
+      - "4013"
+    mem_limit: 256m
+    mem_reservation: 128m
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:4013/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  media-service:
+    container_name: Media
+    build:
+      context: ../..
+      dockerfile: apps/media-service/Dockerfile
+    restart: unless-stopped
+    environment:
+      SERVICE_NAME: media-service
+      ENV_PROFILE: docker
+      UPLOAD_DIR: /var/uploads
+      SHARP_CONCURRENCY: "1"
+      NODE_ENV: production
+      NODE_OPTIONS: --max-old-space-size=256
+    expose:
+      - "4017"
+    volumes:
+      - media_uploads:/var/uploads
+    mem_limit: 320m
+    mem_reservation: 160m
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:4017/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  notifications-service:
+    container_name: Notifications
+    build:
+      context: ../..
+      dockerfile: apps/notifications-service/Dockerfile
+    restart: unless-stopped
+    environment:
+      SERVICE_NAME: notifications-service
+      ENV_PROFILE: docker
+      NODE_ENV: production
+      NODE_OPTIONS: --max-old-space-size=200
+    expose:
+      - "4016"
+    depends_on:
+      redis:
+        condition: service_healthy
+    mem_limit: 256m
+    mem_reservation: 128m
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:4016/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  trading-service:
+    container_name: Trading
+    build:
+      context: ../..
+      dockerfile: apps/trading-service/Dockerfile
+    restart: unless-stopped
+    environment:
+      SERVICE_NAME: trading-service
+      ENV_PROFILE: docker
+      PROOF_DIR: /var/uploads/trade_proofs
+      NODE_ENV: production
+      NODE_OPTIONS: --max-old-space-size=200
+    expose:
+      - "4015"
+    volumes:
+      - media_uploads:/var/uploads
+    depends_on:
+      notifications-service:
+        condition: service_healthy
+    mem_limit: 256m
+    mem_reservation: 128m
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:4015/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  marketplace-service:
+    container_name: Marketplace
+    build:
+      context: ../..
+      dockerfile: apps/marketplace-service/Dockerfile
+    restart: unless-stopped
+    environment:
+      SERVICE_NAME: marketplace-service
+      ENV_PROFILE: docker
+      NODE_ENV: production
+      NODE_OPTIONS: --max-old-space-size=200
+    expose:
+      - "4014"
+    volumes:
+      - media_uploads:/var/uploads
+    depends_on:
+      notifications-service:
+        condition: service_healthy
+    mem_limit: 256m
+    mem_reservation: 128m
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:4014/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  realtime-service:
+    container_name: Realtime
+    build:
+      context: ../..
+      dockerfile: apps/realtime-service/Dockerfile
+    restart: unless-stopped
+    environment:
+      SERVICE_NAME: realtime-service
+      ENV_PROFILE: docker
+      NODE_ENV: production
+      NODE_OPTIONS: --max-old-space-size=148
+    expose:
+      - "4018"
+    depends_on:
+      redis:
+        condition: service_healthy
+    mem_limit: 192m
+    mem_reservation: 96m
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:4018/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  worker-service:
+    container_name: Worker
+    build:
+      context: ../..
+      dockerfile: apps/worker-service/Dockerfile
+    restart: unless-stopped
+    environment:
+      SERVICE_NAME: worker-service
+      ENV_PROFILE: docker
+      NODE_ENV: production
+      NODE_OPTIONS: --max-old-space-size=148
+    expose:
+      - "4020"
+    depends_on:
+      notifications-service:
+        condition: service_healthy
+    mem_limit: 192m
+    mem_reservation: 96m
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:4020/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
 volumes:
   redis_data:
+  media_uploads:

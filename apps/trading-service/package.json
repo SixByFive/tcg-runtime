@@ -9,7 +9,15 @@
     "start": "cross-env SERVICE_NAME=trading-service node src/index.js"
   },
   "dependencies": {
+    "@sbf/auth": "workspace:*",
     "@sbf/config": "workspace:*",
-    "@sbf/logger": "workspace:*"
+    "@sbf/contracts": "workspace:*",
+    "@sbf/database": "workspace:*",
+    "@sbf/logger": "workspace:*",
+    "cookie-parser": "^1.4.7",
+    "cross-env": "^7.0.3",
+    "express": "^4.21.2",
+    "express-rate-limit": "^7.5.0",
+    "helmet": "^8.0.0"
   }
 }
