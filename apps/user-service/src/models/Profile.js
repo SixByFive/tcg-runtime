@@ -38,6 +38,16 @@ export default function defineProfile(sequelize) {
     publicProfile:    { type: DataTypes.BOOLEAN, defaultValue: true },
     wantsTrade:       { type: DataTypes.BOOLEAN, defaultValue: true },
     wantsMarketplace: { type: DataTypes.BOOLEAN, defaultValue: true },
+    // Safety / parental controls
+    // NOTE: These columns require a manual migration on existing databases:
+    //   ALTER TABLE profiles ADD COLUMN dob DATE NULL;
+    //   ALTER TABLE profiles ADD COLUMN parentEmail VARCHAR(255) NULL;
+    //   ALTER TABLE profiles ADD COLUMN parentVerifiedAt DATETIME NULL;
+    //   ALTER TABLE profiles ADD COLUMN restrictionLevel VARCHAR(20) NULL;
+    dob:                 { type: DataTypes.DATEONLY, allowNull: true },
+    parentEmail:         { type: DataTypes.STRING, allowNull: true },
+    parentVerifiedAt:    { type: DataTypes.DATE, allowNull: true },
+    restrictionLevel:    { type: DataTypes.STRING(20), allowNull: true, defaultValue: null }, // null = derived from dob
   }, {
     tableName: 'profiles',
     timestamps: true,

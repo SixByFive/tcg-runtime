@@ -10,6 +10,7 @@ import { startDeliveryJobs } from './jobs/delivery.job.js';
 import notificationsRouter from './routes/notifications.js';
 import internalRouter from './routes/internal.js';
 import adminRouter from './routes/admin.js';
+import pushRouter from './routes/push.js';
 
 const serviceName = 'notifications-service';
 const logger = createLogger(serviceName);
@@ -29,6 +30,7 @@ app.get('/health', (_req, res) => {
 app.use('/notifications/admin', adminRouter);
 app.use('/notifications', notificationsRouter);
 app.use('/internal', internalRouter);
+app.use('/push', pushRouter);
 
 app.use((err, _req, res, _next) => {
   logger.error(err.message);

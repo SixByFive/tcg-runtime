@@ -377,7 +377,8 @@ router.post('/:id/buy', requireAuth, async (req, res) => {
       meta:   { orderId: order.id },
     }).catch(() => {});
 
-    res.status(201).json({ orderId: order.id, clientSecret, totalAmount: totalPence / 100 });
+    await order.reload();
+    res.status(201).json({ ...order.toJSON(), clientSecret });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

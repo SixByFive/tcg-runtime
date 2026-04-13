@@ -1,4 +1,5 @@
 import express from 'express';
+import cors from 'cors';
 import { ApolloServer } from '@apollo/server';
 import { ApolloServerPluginLandingPageLocalDefault } from '@apollo/server/plugin/landingPage/default';
 import { expressMiddleware } from '@as-integrations/express5';
@@ -15,10 +16,58 @@ function sendJson(res, statusCode, payload) {
 }
 
 /**
+ * Build allowed origins from env plus sensible local defaults.
+ */
+function getAllowedOrigins() {
+  const defaults = [
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+    'http://localhost:4010',
+    'http://127.0.0.1:4010',
+    'https://sandbox.embed.apollographql.com',
+  ];
+
+  const rawOrigins = process.env.CORS_ORIGINS || '';
+  const envOrigins = rawOrigins
+    .split(',')
+    .map((o) => o.trim())
+    .filter(Boolean);
+
+  return [...new Set([...defaults, ...envOrigins])];
+}
+
+/**
  * Creates the gateway Express app and mounts REST + GraphQL.
  */
 export async function createApp({ logger }) {
   const app = express();
+  const allowedOrigins = getAllowedOrigins();
+
+  const corsOptions = {
+    origin(origin, callback) {
+      // Allow requests with no origin (curl, server-to-server, Postman)
+      if (!origin || allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      logger.warn(`CORS blocked origin: ${origin}`);
+      return callback(new Error(`CORS: origin ${origin} not allowed`));
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'x-internal-key',
+      'x-admin-key',
+      'x-client-type',
+      'apollo-require-preflight',
+      'x-apollo-operation-name',
+    ],
+  };
+
+  // Apply CORS globally before all other middleware.
+  app.use(cors(corsOptions));
 
   app.use(express.json());
 

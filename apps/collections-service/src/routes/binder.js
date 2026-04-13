@@ -467,6 +467,23 @@ router.put('/:id/pages', requireAuth, async (req, res) => {
 
 // ── Admin routes ──────────────────────────────────────────────────────────────
 
+// GET /binder/admin — list all binders (admin)
+router.get('/admin', requireAdmin, async (req, res) => {
+  try {
+    const limit  = Math.min(Number(req.query.limit) || 200, 500);
+    const offset = Number(req.query.offset) || 0;
+    const binders = await Binder.findAll({
+      attributes: ['id', 'userId', 'name', 'visibility', 'isDeleted', 'createdAt'],
+      order: [['createdAt', 'DESC']],
+      limit,
+      offset,
+    });
+    res.json(binders);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // PATCH /binder/admin/:id
 router.patch('/admin/:id', requireAdmin, async (req, res) => {
   try {

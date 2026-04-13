@@ -50,6 +50,14 @@ services:
         condition: service_healthy
       catalog-service:
         condition: service_healthy
+      messaging-service:
+        condition: service_healthy
+      trading-service:
+        condition: service_healthy
+      payments-service:
+        condition: service_healthy
+      shipping-service:
+        condition: service_healthy
     mem_limit: 256m
     mem_reservation: 128m
     healthcheck:
@@ -208,6 +216,34 @@ services:
       retries: 3
       start_period: 20s
 
+  messaging-service:
+    <<: *host-gateway
+    container_name: Messaging
+    build:
+      context: ../..
+      dockerfile: apps/messaging-service/Dockerfile
+    restart: unless-stopped
+    environment:
+      SERVICE_NAME: messaging-service
+      ENV_PROFILE: docker
+      NODE_ENV: production
+      NODE_OPTIONS: --max-old-space-size=200
+    expose:
+      - "4022"
+    depends_on:
+      notifications-service:
+        condition: service_healthy
+      realtime-service:
+        condition: service_healthy
+    mem_limit: 256m
+    mem_reservation: 128m
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:4022/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
   trading-service:
     <<: *host-gateway
     container_name: Trading
@@ -312,6 +348,30 @@ services:
     mem_reservation: 96m
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:4020/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  shipping-service:
+    <<: *host-gateway
+    container_name: Shipping
+    build:
+      context: ../..
+      dockerfile: apps/shipping-service/Dockerfile
+    restart: unless-stopped
+    environment:
+      SERVICE_NAME: shipping-service
+      ENV_PROFILE: docker
+      NODE_ENV: production
+      NODE_OPTIONS: --max-old-space-size=148
+      SHIPPO_API_KEY: ${SHIPPO_API_KEY:-}
+    expose:
+      - "4023"
+    mem_limit: 192m
+    mem_reservation: 96m
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:4023/health"]
       interval: 30s
       timeout: 5s
       retries: 3

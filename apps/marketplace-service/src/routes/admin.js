@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { requireAdmin } from '../middleware/auth.js';
 import {
-  CardListing, Order, OrderDispute, OwnershipRecord, UserReputation,
+  CardListing, Order, OrderDispute, OwnershipRecord, UserReputation, ProductListing, InventoryItem,
 } from '../models/index.js';
 import {
   capturePaymentIntent, cancelPaymentIntent, refundPaymentIntent,
@@ -139,6 +139,112 @@ router.post('/listings/:id/reject-proof', async (req, res) => {
     }).catch(() => {});
 
     res.json({ ok: true, newProofCode: newCode });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PATCH /admin/orders/:id/fulfilment-status — update fulfilment status
+router.patch('/orders/:id/fulfilment-status', async (req, res) => {
+  const { status } = req.body;
+  const VALID = ['awaiting_shipment', 'shipped', 'completed', 'cancelled'];
+  if (!status || !VALID.includes(status)) {
+    return res.status(400).json({ error: `status must be one of: ${VALID.join(', ')}` });
+  }
+  try {
+    const order = await Order.findByPk(req.params.id);
+    if (!order) return res.status(404).json({ error: 'Order not found' });
+    await order.update({
+      fulfilmentStatus: status,
+      ...(status === 'completed' ? { completedAt: new Date() } : {}),
+      ...(status === 'cancelled' ? { cancelledAt: new Date() } : {}),
+    });
+    res.json(order);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── Product Listings ─────────────────────────────────────────────────────────
+
+router.get('/product-listings', async (req, res) => {
+  try {
+    const page     = Math.max(1, Number(req.query.page) || 1);
+    const pageSize = Math.min(200, Number(req.query.pageSize) || 50);
+    const where    = {};
+    if (req.query.status) where.status = req.query.status;
+
+    const { count, rows } = await ProductListing.findAndCountAll({
+      where,
+      include: [{ model: InventoryItem, as: 'inventory', required: false }],
+      order: [['createdAt', 'DESC']],
+      limit: pageSize,
+      offset: (page - 1) * pageSize,
+    });
+    res.json({ listings: rows, total: count, page, pageSize });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/product-listings', async (req, res) => {
+  const {
+    title, description, imageUrl, imagesJson, colourVariantsJson,
+    price, currency = 'GBP', quantity = 1, status = 'ACTIVE',
+    fulfilmentType, fulfilmentProvider, fulfilmentExternalId,
+  } = req.body;
+  if (!title || price == null) {
+    return res.status(400).json({ error: 'title and price are required' });
+  }
+  try {
+    const listing = await ProductListing.create({
+      sellerId: req.user.sub,
+      title, description, imageUrl, imagesJson, colourVariantsJson,
+      price, currency, quantity, status,
+      fulfilmentType, fulfilmentProvider, fulfilmentExternalId,
+    });
+    const inventory = await InventoryItem.create({
+      productListingId: listing.id,
+      onHand: quantity,
+      reserved: 0,
+      sold: 0,
+    });
+    res.status(201).json({ ...listing.toJSON(), inventory });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.patch('/product-listings/:id', async (req, res) => {
+  try {
+    const listing = await ProductListing.findByPk(req.params.id, {
+      include: [{ model: InventoryItem, as: 'inventory', required: false }],
+    });
+    if (!listing) return res.status(404).json({ error: 'Product listing not found' });
+    const {
+      title, description, imageUrl, imagesJson, colourVariantsJson,
+      price, currency, quantity, status,
+      fulfilmentType, fulfilmentProvider, fulfilmentExternalId,
+    } = req.body;
+    await listing.update({
+      ...(title !== undefined && { title }),
+      ...(description !== undefined && { description }),
+      ...(imageUrl !== undefined && { imageUrl }),
+      ...(imagesJson !== undefined && { imagesJson }),
+      ...(colourVariantsJson !== undefined && { colourVariantsJson }),
+      ...(price !== undefined && { price }),
+      ...(currency !== undefined && { currency }),
+      ...(quantity !== undefined && { quantity }),
+      ...(status !== undefined && { status }),
+      ...(fulfilmentType !== undefined && { fulfilmentType }),
+      ...(fulfilmentProvider !== undefined && { fulfilmentProvider }),
+      ...(fulfilmentExternalId !== undefined && { fulfilmentExternalId }),
+    });
+    if (quantity !== undefined && listing.inventory) {
+      await listing.inventory.update({ onHand: quantity });
+    }
+    await listing.reload({ include: [{ model: InventoryItem, as: 'inventory', required: false }] });
+    res.json(listing);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

@@ -16,6 +16,7 @@
     "@sbf/config": "workspace:*",
     "@sbf/database": "workspace:*",
     "@sbf/logger": "workspace:*",
+    "cors": "^2.8.5",
     "express": "^5.1.0",
     "graphql": "^16.13.2"
   }

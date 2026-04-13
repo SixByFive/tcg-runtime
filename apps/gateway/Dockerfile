@@ -1,4 +1,4 @@
-FROM node:20-alpine
+FROM node:22-alpine
 
 WORKDIR /workspace
 
@@ -7,8 +7,7 @@ COPY apps/gateway ./apps/gateway
 COPY packages ./packages
 COPY env ./env
 
-RUN corepack enable && corepack prepare pnpm@10.17.1 --activate
-RUN pnpm install --no-frozen-lockfile
+RUN npm install -g pnpm && pnpm install --no-frozen-lockfile
 
 EXPOSE 4010
 

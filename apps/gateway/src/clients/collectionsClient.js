@@ -200,3 +200,35 @@ export async function saveBinderPagesAndSlots(token, req, id, pages) {
     headers: authHeaders(token, req),
   });
 }
+
+export async function addCardToBinder(token, req, pageId, input) {
+  return request(`/binder/pages/${encodeURIComponent(pageId)}/slots`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+    headers: authHeaders(token, req),
+  });
+}
+
+// ─── Admin ────────────────────────────────────────────────────────────────────
+
+export async function adminGetBinders(token, { limit = 200, offset = 0 } = {}) {
+  return request(`/binder/admin?limit=${limit}&offset=${offset}`, {
+    headers: authHeaders(token, null),
+  });
+}
+
+export async function adminDeleteBinder(token, id, permanent = false) {
+  const result = await request(`/binder/admin/${encodeURIComponent(id)}${permanent ? '?permanent=true' : ''}`, {
+    method: 'DELETE',
+    headers: authHeaders(token, null),
+  });
+  return result?.ok ?? true;
+}
+
+export async function adminGetCollectionSummary(token, { search, limit = 200 } = {}) {
+  const p = new URLSearchParams({ limit: String(limit) });
+  if (search) p.set('search', search);
+  return request(`/collection/admin/summary?${p.toString()}`, {
+    headers: authHeaders(token, null),
+  });
+}

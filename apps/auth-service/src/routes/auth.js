@@ -134,12 +134,15 @@ router.post('/register', registerLimiter, async (req, res) => {
 // ─── Login ───────────────────────────────────────────────────────────────────
 
 router.post('/login', async (req, res) => {
-  const { email, password } = req.body ?? {};
-  if (!email || !password) {
-    return res.status(400).json({ error: 'email and password are required' });
+  const { email, username, password } = req.body ?? {};
+  // Accept either email or username as the identifier
+  const identifier = email || username;
+  if (!identifier || !password) {
+    return res.status(400).json({ error: 'email (or username) and password are required' });
   }
 
-  const normalizedEmail = email.toLowerCase();
+  const isEmail = identifier.includes('@');
+  const normalizedEmail = isEmail ? identifier.toLowerCase() : identifier;
 
   try {
     await checkLoginBrute(normalizedEmail);
@@ -147,7 +150,9 @@ router.post('/login', async (req, res) => {
     return res.status(err.status ?? 429).json({ error: err.message });
   }
 
-  const user = await User.findOne({ where: { email: normalizedEmail } });
+  const user = await User.findOne({
+    where: isEmail ? { email: normalizedEmail } : { username: identifier },
+  });
 
   // Constant-time failure path — always hash even if user not found
   const passwordMatch = user?.password
@@ -156,7 +161,7 @@ router.post('/login', async (req, res) => {
 
   if (!user || !passwordMatch) {
     await recordLoginFailure(normalizedEmail);
-    return res.status(401).json({ error: 'Invalid email or password' });
+    return res.status(401).json({ error: 'Invalid credentials' });
   }
 
   if (user.isBanned) {

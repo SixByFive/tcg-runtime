@@ -6,8 +6,11 @@ import defineOrderDispute   from './OrderDispute.js';
 import defineSellerProfile  from './SellerProfile.js';
 import defineOwnershipRecord from './OwnershipRecord.js';
 import defineUserReputation  from './UserReputation.js';
+import defineProductListing  from './ProductListing.js';
+import defineInventoryItem   from './InventoryItem.js';
 
 export let CardListing, Offer, Order, OrderDispute, SellerProfile, OwnershipRecord, UserReputation;
+export let ProductListing, InventoryItem;
 export let sequelize;
 
 let initialized = false;
@@ -23,6 +26,8 @@ export async function initModels() {
   SellerProfile   = defineSellerProfile(sequelize);
   OwnershipRecord = defineOwnershipRecord(sequelize); // cross-service, no sync
   UserReputation  = defineUserReputation(sequelize);  // cross-service, no sync
+  ProductListing  = defineProductListing(sequelize);
+  InventoryItem   = defineInventoryItem(sequelize);
 
   // Associations
   CardListing.hasMany(Offer,  { foreignKey: 'listingId', as: 'offers' });
@@ -30,6 +35,8 @@ export async function initModels() {
   Offer.belongsTo(CardListing, { foreignKey: 'listingId' });
   Order.hasOne(OrderDispute,   { foreignKey: 'orderId', as: 'dispute' });
   OrderDispute.belongsTo(Order, { foreignKey: 'orderId' });
+  ProductListing.hasOne(InventoryItem, { foreignKey: 'productListingId', as: 'inventory' });
+  InventoryItem.belongsTo(ProductListing, { foreignKey: 'productListingId' });
 
   const syncOpts = process.env.NODE_ENV === 'development'
     ? { alter: true }
@@ -40,6 +47,8 @@ export async function initModels() {
   await Order.sync(syncOpts);
   await OrderDispute.sync(syncOpts);
   await SellerProfile.sync(syncOpts);
+  await ProductListing.sync(syncOpts);
+  await InventoryItem.sync(syncOpts);
   // OwnershipRecord and UserReputation: cross-service, no sync
 
   initialized = true;

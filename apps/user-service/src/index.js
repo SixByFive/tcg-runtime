@@ -7,6 +7,9 @@ import { createLogger } from '@sbf/logger';
 import { initModels } from './models/index.js';
 import usersRouter from './routes/users.js';
 import adminRouter from './routes/admin.js';
+import rewardsRouter from './routes/rewards.js';
+import auditRouter from './routes/audit.js';
+import safetyRouter from './routes/safety.js';
 
 const serviceName = 'user-service';
 const logger = createLogger(serviceName);
@@ -36,6 +39,9 @@ app.get('/health', (_req, res) => res.json({ status: 'ok', service: serviceName 
 
 app.use('/users', usersRouter);
 app.use('/admin', adminRouter);
+app.use('/rewards', rewardsRouter);
+app.use('/audit', auditRouter);
+app.use('/safety', safetyRouter);
 
 app.use((err, req, res, _next) => {
   logger.error('Unhandled error', { path: req.path, error: err.message });

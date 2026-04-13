@@ -1,6 +1,7 @@
 import http from 'node:http';
 import express from 'express';
 import { WebSocketServer } from 'ws';
+import { Server as SocketIO } from 'socket.io';
 import cookieParser from 'cookie-parser';
 import cookie from 'cookie';
 import jwt from 'jsonwebtoken';
@@ -34,14 +35,86 @@ app.use('/internal', internalRouter);
 
 const server = http.createServer(app);
 
-// ─── WebSocket ────────────────────────────────────────────────────────────────
+// ─── Socket.IO ────────────────────────────────────────────────────────────────
+// The frontend connects Socket.IO to /realtime/socket.io.
+
+const io = new SocketIO(server, {
+  path: '/realtime/socket.io',
+  cors: {
+    origin: process.env.FRONTEND_URL || '*',
+    credentials: true,
+  },
+  // Allow token via query param, cookie, or Authorization header
+  allowRequest: (req, callback) => callback(null, true),
+});
+
+/**
+ * Extract JWT from a Socket.IO handshake.
+ * Priority: handshake.auth.token → query.token → cookie → Authorization header
+ */
+function extractSioToken(socket) {
+  const { auth, headers, query } = socket.handshake;
+  if (auth?.token) return auth.token;
+  if (query?.token) return query.token;
+  const cookies = cookie.parse(headers.cookie || '');
+  if (cookies.sbf_access) return cookies.sbf_access;
+  const authHeader = headers.authorization || '';
+  if (authHeader.startsWith('Bearer ')) return authHeader.slice(7);
+  return null;
+}
+
+io.use((socket, next) => {
+  const token = extractSioToken(socket);
+  if (!token) {
+    return next(new Error('Authentication required'));
+  }
+  try {
+    const payload = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
+    socket.userId = payload.sub;
+    socket.userRole = payload.role ?? null;
+    next();
+  } catch {
+    next(new Error('Invalid or expired token'));
+  }
+});
+
+io.on('connection', (socket) => {
+  const conn = {
+    type: 'sio',
+    send(payload) {
+      try {
+        const { event, data } = JSON.parse(payload);
+        socket.emit(event, data);
+      } catch {
+        socket.emit('message', payload);
+      }
+    },
+    close() {
+      socket.disconnect(true);
+    },
+  };
+
+  register(socket.userId, conn);
+  logger.info(`Socket.IO connected: ${socket.userId} (users online: ${connectedUserCount()})`);
+
+  socket.emit('connected', { userId: socket.userId });
+
+  socket.on('disconnect', () => {
+    unregister(socket.userId, conn);
+    logger.info(`Socket.IO disconnected: ${socket.userId}`);
+  });
+
+  socket.on('error', (err) => {
+    unregister(socket.userId, conn);
+    logger.error(`Socket.IO error for ${socket.userId}: ${err.message}`);
+  });
+});
+
+// ─── Raw WebSocket ────────────────────────────────────────────────────────────
+// Kept for backwards compatibility / SSE fallback clients.
 
 const wss = new WebSocketServer({ noServer: true });
 
-/**
- * Extract a JWT from the WS upgrade request.
- * Checks (in order): ?token= query param → sbf_access cookie → Authorization header.
- */
 function extractWsToken(req) {
   try {
     const url = new URL(req.url, 'http://localhost');
@@ -57,6 +130,9 @@ function extractWsToken(req) {
 }
 
 server.on('upgrade', (req, socket, head) => {
+  // Socket.IO manages its own upgrade for /realtime/socket.io paths
+  if (req.url.startsWith('/realtime/socket.io')) return;
+
   if (!req.url.startsWith('/realtime/ws')) {
     socket.destroy();
     return;
@@ -99,10 +175,8 @@ wss.on('connection', (ws) => {
   register(ws.userId, conn);
   logger.info(`WS connected: ${ws.userId} (users online: ${connectedUserCount()})`);
 
-  // Send initial connected event
   conn.send(JSON.stringify({ event: 'connected', data: { userId: ws.userId }, ts: Date.now() }));
 
-  // Keepalive ping every 30 s
   const ping = setInterval(() => {
     if (ws.readyState === ws.OPEN) ws.ping();
   }, 30_000);
