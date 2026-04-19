@@ -35,7 +35,7 @@ jobs:
           scope: '@sixbyfive'
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --no-frozen-lockfile
 
       # Bump patch version automatically so every push produces a new version.
       # For proper semver control, remove this step and manage versions manually.
