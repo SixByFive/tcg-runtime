@@ -5,7 +5,7 @@ on:
     branches:
       - main
     paths:
-      # Re-publish whenever the schema, types, or client changes
+      # Re-publish whenever the schema, types or client changes
       - 'apps/gateway/src/graphql/schema.js'
       - 'packages/api-types/**'
       - 'packages/api-client/**'
