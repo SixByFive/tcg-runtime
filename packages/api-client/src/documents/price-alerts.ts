@@ -1,6 +1,6 @@
 import type { TypedDocumentNode } from '@graphql-typed-document-node/core';
 import { gql } from 'graphql-tag';
-import type { PriceAlert, UpsertPriceAlertInput } from '@sbf/api-types';
+import type { PriceAlert, UpsertPriceAlertInput } from '@sixbyfive/api-types';
 
 const ALERT_FIELDS = `
   id cardId variation condition currency value windowHours cooldownHours

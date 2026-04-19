@@ -5,7 +5,7 @@ import type {
   UserSubscription,
   SubscriptionPortal,
   PaymentTransaction,
-} from '@sbf/api-types';
+} from '@sixbyfive/api-types';
 
 const PLAN_FIELDS = `
   id name description priceMonthly priceYearly currency features

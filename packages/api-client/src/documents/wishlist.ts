@@ -1,6 +1,6 @@
 import type { TypedDocumentNode } from '@graphql-typed-document-node/core';
 import { gql } from 'graphql-tag';
-import type { WishlistEntry, WishlistPage, WishlistStatus } from '@sbf/api-types';
+import type { WishlistEntry, WishlistPage, WishlistStatus } from '@sixbyfive/api-types';
 
 const ENTRY_FIELDS = `
   id userId cardId quantity variation notes status addedAt createdAt updatedAt

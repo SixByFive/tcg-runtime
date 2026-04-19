@@ -1,6 +1,6 @@
 import type { TypedDocumentNode } from '@graphql-typed-document-node/core';
 import { gql } from 'graphql-tag';
-import type { AuthPayload, User, TwoFactorSetup } from '@sbf/api-types';
+import type { AuthPayload, User, TwoFactorSetup } from '@sixbyfive/api-types';
 
 // ── Queries ───────────────────────────────────────────────────────────────────
 

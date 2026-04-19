@@ -19,7 +19,7 @@ import type {
   Reward,
   SafetyProfile,
   BroadcastNotificationInput,
-} from '@sbf/api-types';
+} from '@sixbyfive/api-types';
 
 // ── Admin Queries ─────────────────────────────────────────────────────────────
 

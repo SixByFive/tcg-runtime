@@ -1,6 +1,6 @@
 import type { TypedDocumentNode } from '@graphql-typed-document-node/core';
 import { gql } from 'graphql-tag';
-import type { UserProfile, PublicUser } from '@sbf/api-types';
+import type { UserProfile, PublicUser } from '@sixbyfive/api-types';
 
 export interface UserProfileQueryVariables { username: string }
 export interface UserProfileQuery { userProfile: UserProfile | null | undefined }

@@ -1,6 +1,6 @@
 import type { TypedDocumentNode } from '@graphql-typed-document-node/core';
 import { gql } from 'graphql-tag';
-import type { SafetyProfile } from '@sbf/api-types';
+import type { SafetyProfile } from '@sixbyfive/api-types';
 
 const SAFETY_FIELDS = `
   dob parentEmail parentVerifiedAt restrictionLevel

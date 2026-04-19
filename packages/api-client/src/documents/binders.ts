@@ -1,6 +1,6 @@
 import type { TypedDocumentNode } from '@graphql-typed-document-node/core';
 import { gql } from 'graphql-tag';
-import type { Binder, BinderPage, BinderSlot, BinderInput, BinderPageInput } from '@sbf/api-types';
+import type { Binder, BinderPage, BinderSlot, BinderInput, BinderPageInput } from '@sixbyfive/api-types';
 
 const BINDER_FIELDS = `
   id userId name description coverColor accentColor visibility slug isDeleted createdAt updatedAt

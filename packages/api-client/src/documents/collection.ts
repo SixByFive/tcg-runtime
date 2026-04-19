@@ -1,6 +1,6 @@
 import type { TypedDocumentNode } from '@graphql-typed-document-node/core';
 import { gql } from 'graphql-tag';
-import type { CollectionEntry, BulkAddResult, BulkAddCardInput } from '@sbf/api-types';
+import type { CollectionEntry, BulkAddResult, BulkAddCardInput } from '@sixbyfive/api-types';
 
 const ENTRY_FIELDS = `
   id userId cardId quantity condition variation wishlist createdAt updatedAt

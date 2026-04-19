@@ -1,5 +1,5 @@
 /**
- * @sbf/api-client — lightweight fetch-based GraphQL client.
+ * @sixbyfive/api-client — lightweight fetch-based GraphQL client.
  *
  * Works in browser, Node.js (≥18), and React Native.
  * No runtime dependencies beyond `graphql` (for `print`) and
@@ -7,7 +7,7 @@
  *
  * @example Basic usage
  * ```ts
- * import { SbfApiClient, MyCollectionDocument } from '@sbf/api-client';
+ * import { SbfApiClient, MyCollectionDocument } from '@sixbyfive/api-client';
  *
  * const client = new SbfApiClient({
  *   url: process.env.NEXT_PUBLIC_API_URL,
@@ -20,7 +20,7 @@
  * @example With Apollo Client (no client instance needed)
  * ```tsx
  * import { useQuery } from '@apollo/client';
- * import { MyCollectionDocument } from '@sbf/api-client';
+ * import { MyCollectionDocument } from '@sixbyfive/api-client';
  *
  * const { data } = useQuery(MyCollectionDocument);
  * ```
@@ -28,7 +28,7 @@
  * @example With React Query / TanStack Query
  * ```ts
  * import { useQuery } from '@tanstack/react-query';
- * import { SbfApiClient, MyCollectionDocument } from '@sbf/api-client';
+ * import { SbfApiClient, MyCollectionDocument } from '@sixbyfive/api-client';
  *
  * const client = new SbfApiClient({ getToken: () => getAuthToken() });
  *

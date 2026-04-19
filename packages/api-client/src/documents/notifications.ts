@@ -1,6 +1,6 @@
 import type { TypedDocumentNode } from '@graphql-typed-document-node/core';
 import { gql } from 'graphql-tag';
-import type { NotificationPage, NotificationFilterInput, NotificationPrefs } from '@sbf/api-types';
+import type { NotificationPage, NotificationFilterInput, NotificationPrefs } from '@sixbyfive/api-types';
 
 export interface MyNotificationsQueryVariables {
   page?: number | null;

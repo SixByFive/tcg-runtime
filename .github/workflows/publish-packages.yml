@@ -31,7 +31,7 @@ jobs:
         with:
           node-version: 20
           registry-url: https://npm.pkg.github.com
-          scope: '@sbf'
+          scope: '@sixbyfive'
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -43,18 +43,18 @@ jobs:
           cd packages/api-types  && npm version patch --no-git-tag-version
           cd ../api-client       && npm version patch --no-git-tag-version
 
-      - name: Build @sbf/api-types
-        run: pnpm --filter @sbf/api-types build
+      - name: Build @sixbyfive/api-types
+        run: pnpm --filter @sixbyfive/api-types build
 
-      - name: Build @sbf/api-client
-        run: pnpm --filter @sbf/api-client build
+      - name: Build @sixbyfive/api-client
+        run: pnpm --filter @sixbyfive/api-client build
 
-      - name: Publish @sbf/api-types
-        run: pnpm --filter @sbf/api-types publish --no-git-checks
+      - name: Publish @sixbyfive/api-types
+        run: pnpm --filter @sixbyfive/api-types publish --no-git-checks
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Publish @sbf/api-client
-        run: pnpm --filter @sbf/api-client publish --no-git-checks
+      - name: Publish @sixbyfive/api-client
+        run: pnpm --filter @sixbyfive/api-client publish --no-git-checks
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,6 +1,6 @@
 import type { TypedDocumentNode } from '@graphql-typed-document-node/core';
 import { gql } from 'graphql-tag';
-import type { DiscordGuild, DiscordChannel } from '@sbf/api-types';
+import type { DiscordGuild, DiscordChannel } from '@sixbyfive/api-types';
 
 export interface DiscordShareGuildsQuery { discordShareGuilds: DiscordGuild[] }
 export const DiscordShareGuildsDocument: TypedDocumentNode<

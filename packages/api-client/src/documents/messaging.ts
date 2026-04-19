@@ -1,6 +1,6 @@
 import type { TypedDocumentNode } from '@graphql-typed-document-node/core';
 import { gql } from 'graphql-tag';
-import type { ChatThread, Message, ChatMute, ChatBlock } from '@sbf/api-types';
+import type { ChatThread, Message, ChatMute, ChatBlock } from '@sixbyfive/api-types';
 
 const MESSAGE_FIELDS = `id senderId receiverId content createdAt isRead isSystemMessage meta`;
 const THREAD_FIELDS = `

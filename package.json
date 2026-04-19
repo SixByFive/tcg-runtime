@@ -13,8 +13,8 @@
     "health:core": "node infra/scripts/health-all.mjs --only=gateway,auth-service,catalog-service --strict",
     "health:strict": "node infra/scripts/health-all.mjs --strict",
     "schema:export": "pnpm --filter @sbf/gateway schema:export",
-    "codegen": "pnpm --filter @sbf/api-types codegen",
-    "build:packages": "pnpm --filter @sbf/api-types build && pnpm --filter @sbf/api-client build"
+    "codegen": "pnpm --filter @sixbyfive/api-types codegen",
+    "build:packages": "pnpm --filter @sixbyfive/api-types build && pnpm --filter @sixbyfive/api-client build"
   },
   "dependencies": {
     "@apollo/server": "^5.5.0",

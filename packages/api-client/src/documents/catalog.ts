@@ -7,7 +7,7 @@ import type {
   CardSearchInput,
   PriceObservation,
   PriceRollup,
-} from '@sbf/api-types';
+} from '@sixbyfive/api-types';
 
 export interface CardsearchSetsQueryVariables { limit?: number | null; offset?: number | null }
 export interface CardsearchSetsQuery { cardsearchSets: CardSet[] }

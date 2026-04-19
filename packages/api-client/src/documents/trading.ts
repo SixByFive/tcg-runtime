@@ -1,6 +1,6 @@
 import type { TypedDocumentNode } from '@graphql-typed-document-node/core';
 import { gql } from 'graphql-tag';
-import type { Trade, TradeStatus, TradeProofResult, TradeDisputeResult, TradeCardInput } from '@sbf/api-types';
+import type { Trade, TradeStatus, TradeProofResult, TradeDisputeResult, TradeCardInput } from '@sixbyfive/api-types';
 
 const TRADE_FIELDS = `
   id partyAId partyBId initiatorId status counterCount lastCounterBy

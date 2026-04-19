@@ -1,6 +1,6 @@
 import type { TypedDocumentNode } from '@graphql-typed-document-node/core';
 import { gql } from 'graphql-tag';
-import type { Achievement, UserAchievement } from '@sbf/api-types';
+import type { Achievement, UserAchievement } from '@sixbyfive/api-types';
 
 const ACHIEVEMENT_FIELDS = `id code name description tier iconUrl createdAt updatedAt`;
 const USER_ACHIEVEMENT_FIELDS = `

@@ -1,5 +1,5 @@
 /**
- * @sbf/api-client
+ * @sixbyfive/api-client
  *
  * Typed GraphQL client for the SBF TCG platform.
  * Works in browser, Node.js (≥18), and React Native — no framework lock-in.
@@ -7,7 +7,7 @@
  * ## Quick start (fetch client)
  *
  * ```ts
- * import { SbfApiClient, MyCollectionDocument } from '@sbf/api-client';
+ * import { SbfApiClient, MyCollectionDocument } from '@sixbyfive/api-client';
  *
  * const client = new SbfApiClient({
  *   url: process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4010/graphql',
@@ -21,7 +21,7 @@
  *
  * ```tsx
  * import { useQuery } from '@apollo/client';
- * import { MyCollectionDocument } from '@sbf/api-client';
+ * import { MyCollectionDocument } from '@sixbyfive/api-client';
  *
  * function Component() {
  *   const { data } = useQuery(MyCollectionDocument);
@@ -33,7 +33,7 @@
  *
  * ```ts
  * import { useQuery } from '@tanstack/react-query';
- * import { SbfApiClient, SearchCardsDocument } from '@sbf/api-client';
+ * import { SbfApiClient, SearchCardsDocument } from '@sixbyfive/api-client';
  *
  * const client = new SbfApiClient({ getToken: () => getAuthToken() });
  *
@@ -50,9 +50,9 @@
  * ## Regenerating after schema changes
  *
  * ```bash
- * pnpm --filter @sbf/gateway schema:export     # update schema.graphql in api-types
- * pnpm --filter @sbf/api-types codegen         # regenerate TypeScript types
- * pnpm --filter @sbf/api-client codegen        # regenerate typed documents
+ * pnpm --filter @sbf/gateway schema:export           # update schema.graphql in api-types
+ * pnpm --filter @sixbyfive/api-types codegen         # regenerate TypeScript types
+ * pnpm --filter @sixbyfive/api-client codegen        # regenerate typed documents
  * ```
  */
 
@@ -66,7 +66,7 @@ export {
 export type { SbfClientConfig, GqlErrorDetail } from './client.js';
 
 // ── Schema types (re-exported for convenience) ────────────────────────────────
-export type * from '@sbf/api-types';
+export type * from '@sixbyfive/api-types';
 
 // ── Typed operation documents — by domain ─────────────────────────────────────
 export * from './documents/auth.js';

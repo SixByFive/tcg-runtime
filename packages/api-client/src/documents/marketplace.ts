@@ -13,7 +13,7 @@ import type {
   CreateOrderFromListingInput,
   ListingType,
   ListingStatus,
-} from '@sbf/api-types';
+} from '@sixbyfive/api-types';
 
 const ORDER_FIELDS = `
   id orderNumber total paidAt paymentMethod buyerEmail buyerName guestCheckout
