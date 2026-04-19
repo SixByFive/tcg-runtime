@@ -9,6 +9,7 @@ on:
       - 'apps/gateway/src/graphql/schema.js'
       - 'packages/api-types/**'
       - 'packages/api-client/**'
+      - 'pnpm-lock.yaml'
 
 jobs:
   publish:
