@@ -41,6 +41,7 @@ services:
       ENV_PROFILE: docker
       NODE_ENV: production
       NODE_OPTIONS: --max-old-space-size=200
+      DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN:-}
     ports:
       - "4010:4010"
     depends_on:
@@ -79,6 +80,7 @@ services:
       ENV_PROFILE: docker
       NODE_ENV: production
       NODE_OPTIONS: --max-old-space-size=200
+      DISCORD_TOKEN_SECRET: ${DISCORD_TOKEN_SECRET:-}
     expose:
       - "4011"
     depends_on:
@@ -105,6 +107,9 @@ services:
       ENV_PROFILE: docker
       NODE_ENV: production
       NODE_OPTIONS: --max-old-space-size=200
+      DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN:-}
+      DISCORD_TOKEN_SECRET: ${DISCORD_TOKEN_SECRET:-}
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY:-}
     expose:
       - "4021"
     mem_limit: 256m

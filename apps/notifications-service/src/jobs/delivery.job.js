@@ -49,6 +49,17 @@ async function sendPendingInstantEmails() {
 
   for (const [userId, notifications] of Object.entries(byUser)) {
     const prefs = await UserNotificationPref.findOne({ where: { userId } });
+    // Quiet-hours check
+    if (prefs && prefs.quietStart && prefs.quietEnd) {
+      const now = new Date();
+      const hh  = now.getUTCHours() * 60 + now.getUTCMinutes();
+      const [qs_h, qs_m] = prefs.quietStart.split(':').map(Number);
+      const [qe_h, qe_m] = prefs.quietEnd.split(':').map(Number);
+      const qs = qs_h * 60 + qs_m;
+      const qe = qe_h * 60 + qe_m;
+      const inQuiet = qs <= qe ? (hh >= qs && hh < qe) : (hh >= qs || hh < qe);
+      if (inQuiet) continue; // skip — user is in quiet hours, delivery job will retry next run
+    }
     if (prefs && prefs.emailEnabled === false) continue;
     if (prefs && prefs.digest !== 'instant') continue;
 

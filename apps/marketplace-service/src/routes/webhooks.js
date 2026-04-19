@@ -46,6 +46,53 @@ router.post('/stripe', async (req, res) => {
         break;
       }
 
+      // Fired when a charge is captured (manual-capture flow completes).
+      case 'charge.captured': {
+        const charge = event.data.object;
+        const order  = await Order.findOne({ where: { stripePaymentIntentId: charge.payment_intent } });
+        if (!order) break;
+
+        await order.update({ paymentStatus: 'captured', capturedAt: new Date() });
+
+        await notifyUser({
+          userId:  order.buyerId,
+          type:    NotificationType.INFO,
+          title:   'Payment confirmed',
+          body:    'Your payment has been processed. Your order is on its way!',
+          linkUrl: `/orders/${order.id}`,
+          meta:    { orderId: order.id },
+        }).catch(() => {});
+
+        await notifyUser({
+          userId:  order.sellerId,
+          type:    NotificationType.INFO,
+          title:   'Payment received',
+          body:    "The buyer's payment has been captured. Funds will be transferred after delivery confirmation.",
+          linkUrl: `/orders/${order.id}`,
+          meta:    { orderId: order.id },
+        }).catch(() => {});
+        break;
+      }
+
+      // Fired when a PaymentIntent payment attempt fails.
+      case 'payment_intent.payment_failed': {
+        const pi    = event.data.object;
+        const order = await Order.findOne({ where: { stripePaymentIntentId: pi.id } });
+        if (!order) break;
+
+        await order.update({ paymentStatus: 'cancelled' });
+
+        await notifyUser({
+          userId:  order.buyerId,
+          type:    NotificationType.WARNING,
+          title:   'Payment failed',
+          body:    'Your payment could not be processed. Please update your payment method and try again.',
+          linkUrl: `/orders/${order.id}`,
+          meta:    { orderId: order.id },
+        }).catch(() => {});
+        break;
+      }
+
       // Fired when a PaymentIntent is cancelled (dispute pre-capture, order cancellation).
       case 'payment_intent.canceled': {
         const pi    = event.data.object;

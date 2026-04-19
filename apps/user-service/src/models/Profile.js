@@ -48,6 +48,9 @@ export default function defineProfile(sequelize) {
     parentEmail:         { type: DataTypes.STRING, allowNull: true },
     parentVerifiedAt:    { type: DataTypes.DATE, allowNull: true },
     restrictionLevel:    { type: DataTypes.STRING(20), allowNull: true, defaultValue: null }, // null = derived from dob
+    // MIGRATION: ALTER TABLE profiles ADD COLUMN parentVerificationToken VARCHAR(64); ALTER TABLE profiles ADD COLUMN parentVerificationTokenExpiry DATETIME;
+    parentVerificationToken:       { type: DataTypes.STRING(64), allowNull: true },
+    parentVerificationTokenExpiry: { type: DataTypes.DATE,       allowNull: true },
   }, {
     tableName: 'profiles',
     timestamps: true,

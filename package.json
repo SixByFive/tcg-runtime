@@ -11,7 +11,10 @@
     "dev:all": "pnpm --parallel --filter @sbf/gateway --filter @sbf/auth-service --filter @sbf/catalog-service --filter @sbf/collections-service --filter @sbf/marketplace-service --filter @sbf/trading-service --filter @sbf/notifications-service --filter @sbf/media-service --filter @sbf/realtime-service --filter @sbf/payments-service --filter @sbf/worker-service dev",
     "health": "node infra/scripts/health-all.mjs",
     "health:core": "node infra/scripts/health-all.mjs --only=gateway,auth-service,catalog-service --strict",
-    "health:strict": "node infra/scripts/health-all.mjs --strict"
+    "health:strict": "node infra/scripts/health-all.mjs --strict",
+    "schema:export": "pnpm --filter @sbf/gateway schema:export",
+    "codegen": "pnpm --filter @sbf/api-types codegen",
+    "build:packages": "pnpm --filter @sbf/api-types build && pnpm --filter @sbf/api-client build"
   },
   "dependencies": {
     "@apollo/server": "^5.5.0",

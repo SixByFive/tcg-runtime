@@ -64,14 +64,20 @@ export async function initModels() {
 
   // ── price_alerts (catalog-service) ────────────────────────────────────────
   PriceAlert = sequelize.define('PriceAlert', {
-    id:          { type: DataTypes.UUID, primaryKey: true },
-    userId:      DataTypes.UUID,
-    cardId:      DataTypes.STRING(80),
-    variant:     DataTypes.STRING(80),
-    currency:    DataTypes.CHAR(3),
-    targetPrice: DataTypes.DECIMAL(10, 4),
-    enabled:     DataTypes.BOOLEAN,
-    triggeredAt: DataTypes.DATE,
+    id:           { type: DataTypes.UUID, primaryKey: true },
+    userId:       DataTypes.UUID,
+    cardId:       DataTypes.STRING(80),
+    variant:      DataTypes.STRING(80),
+    currency:     DataTypes.CHAR(3),
+    targetPrice:  DataTypes.DECIMAL(10, 4),
+    enabled:      DataTypes.BOOLEAN,
+    triggeredAt:  DataTypes.DATE,
+    // Extended condition fields
+    condition:    { type: DataTypes.STRING(20), defaultValue: 'below' },
+    value:        DataTypes.DECIMAL(10, 4),
+    windowHours:  { type: DataTypes.INTEGER, defaultValue: 24 },
+    cooldownHours: { type: DataTypes.INTEGER, defaultValue: 24 },
+    isActive:     { type: DataTypes.BOOLEAN, defaultValue: true },
   }, { tableName: 'price_alerts', timestamps: true });
 
   initialized = true;

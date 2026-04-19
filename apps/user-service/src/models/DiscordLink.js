@@ -12,6 +12,9 @@ export default function defineDiscordLink(sequelize) {
     discordUsername: DataTypes.STRING,
     avatar: DataTypes.STRING,
     linkedAt: DataTypes.DATE,
+    discordAccessTokenEnc:  DataTypes.STRING,
+    discordRefreshTokenEnc: DataTypes.STRING,
+    discordTokenExpiresAt:  DataTypes.DATE,
   }, {
     tableName: 'user_discord_links',
     timestamps: false,

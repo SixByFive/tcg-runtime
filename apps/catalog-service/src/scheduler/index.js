@@ -9,6 +9,8 @@ import { ingestSet } from '../jobs/ingestSet.job.js';
 import { collectPrices } from '../jobs/collectPrices.job.js';
 import { fxDaily } from '../jobs/fxDaily.job.js';
 import { rebuildPriceRollups } from '../jobs/rollup.job.js';
+import { patchGaps } from '../jobs/patchGaps.job.js';
+import { verifyDataHealth } from '../jobs/verifyDataHealth.job.js';
 import { createLogger } from '@sbf/logger';
 
 const logger = createLogger('scheduler');
@@ -18,6 +20,8 @@ const JOBS = {
   collectPrices: (payload) => collectPrices(payload),
   fxDaily: (payload) => fxDaily(payload),
   priceRollups: (payload) => rebuildPriceRollups(payload),
+  patchGaps: (payload) => patchGaps(payload),
+  verifyDataHealth: (payload) => verifyDataHealth(payload),
 };
 
 // In-memory registry of running cron handles: id -> cron.ScheduledTask
@@ -189,6 +193,35 @@ export const Scheduler = {
 
   async list() {
     return SchedulerTask.findAll({ order: [['name', 'ASC']] });
+  },
+
+  async ensureGlobalTasks() {
+    const templates = [
+      {
+        id: 'global:patchGaps',
+        cronExp: '0 2 * * *',
+        name: 'patchGaps',
+        payload: {},
+        description: 'Daily price gap fill (02:00 UTC)',
+      },
+      {
+        id: 'global:verifyDataHealth',
+        cronExp: '0 3 * * *',
+        name: 'verifyDataHealth',
+        payload: {},
+        description: 'Daily catalog data health check (03:00 UTC)',
+      },
+    ];
+
+    for (const tpl of templates) {
+      const exists = await SchedulerTask.findByPk(tpl.id);
+      if (!exists) {
+        await this.addCron(tpl.cronExp, tpl.name, tpl.payload, {
+          id: tpl.id,
+          description: tpl.description,
+        });
+      }
+    }
   },
 
   async ensureSetTasks(setCode) {

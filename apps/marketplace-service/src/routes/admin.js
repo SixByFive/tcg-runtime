@@ -159,6 +159,40 @@ router.patch('/orders/:id/fulfilment-status', async (req, res) => {
       ...(status === 'completed' ? { completedAt: new Date() } : {}),
       ...(status === 'cancelled' ? { cancelledAt: new Date() } : {}),
     });
+
+    if (status === 'shipped') {
+      notifyUser({
+        userId:  order.buyerId,
+        type:    NotificationType.INFO,
+        title:   'Your order has been shipped!',
+        body:    "Your order is on its way. You'll receive it soon.",
+        linkUrl: `/orders/${order.id}`,
+      }).catch(() => {});
+    } else if (status === 'completed') {
+      notifyUser({
+        userId:  order.buyerId,
+        type:    NotificationType.INFO,
+        title:   'Order complete',
+        body:    'Your order has been marked complete. Thank you!',
+        linkUrl: `/orders/${order.id}`,
+      }).catch(() => {});
+    } else if (status === 'cancelled') {
+      notifyUser({
+        userId:  order.buyerId,
+        type:    NotificationType.WARNING,
+        title:   'Order cancelled',
+        body:    'Your order has been cancelled by an administrator.',
+        linkUrl: `/orders/${order.id}`,
+      }).catch(() => {});
+      notifyUser({
+        userId:  order.sellerId,
+        type:    NotificationType.WARNING,
+        title:   'Order cancelled',
+        body:    'Your order has been cancelled by an administrator.',
+        linkUrl: `/orders/${order.id}`,
+      }).catch(() => {});
+    }
+
     res.json(order);
   } catch (err) {
     res.status(500).json({ error: err.message });

@@ -9,6 +9,7 @@ import { runEscrowExpiryJob }    from './jobs/escrow-expiry.job.js';
 import { runOfferExpiryJob }     from './jobs/offer-expiry.job.js';
 import { runPriceAlertsJob }     from './jobs/price-alerts.job.js';
 import { runTradeTopUpExpiryJob } from './jobs/trade-topup-expiry.job.js';
+import { runUnreadReminderJob }   from './jobs/unread-reminder.job.js';
 
 const serviceName = 'worker-service';
 const logger      = createLogger(serviceName);
@@ -55,6 +56,9 @@ function startJobs() {
 
   // Trade top-up expiry warning — daily at 09:05
   schedule('trade-topup-expiry', '5 9 * * *', runTradeTopUpExpiryJob);
+
+  // Unread message email reminders — every 15 minutes
+  schedule('unread-reminder', '*/15 * * * *', runUnreadReminderJob);
 }
 
 // ─── Boot ─────────────────────────────────────────────────────────────────────

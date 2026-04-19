@@ -138,11 +138,42 @@ export async function exportUserData(token) {
   return data;
 }
 
-/**
- * Achievements are not yet implemented — returns empty array gracefully.
- */
-export async function getAchievements(_userId) {
-  return [];
+function authHeaders(token) {
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+export async function getAchievements(userId) {
+  const data = await request(`/achievements/user/${encodeURIComponent(userId)}`);
+  return Array.isArray(data) ? data : [];
+}
+export async function getMyAchievements(token) {
+  const data = await request('/achievements/my', { headers: authHeaders(token) });
+  return Array.isArray(data) ? data : [];
+}
+export async function getAllAchievements() {
+  const data = await request('/achievements');
+  return Array.isArray(data) ? data : [];
+}
+export async function adminGrantAchievement(token, { userId, achievementId, data }) {
+  return request('/achievements/grant', {
+    method: 'POST', headers: authHeaders(token),
+    body: JSON.stringify({ userId, achievementId, data }),
+  });
+}
+
+export async function getDiscordShareGuilds(token) {
+  const data = await request('/discord/share/guilds', { headers: authHeaders(token) });
+  return Array.isArray(data) ? data : [];
+}
+export async function getDiscordShareChannels(token, guildId) {
+  const data = await request(`/discord/share/guilds/${encodeURIComponent(guildId)}/channels`, { headers: authHeaders(token) });
+  return Array.isArray(data) ? data : [];
+}
+export async function shareCollectionToDiscord(token, body) {
+  return request('/discord/share/collection', { method: 'POST', headers: authHeaders(token), body: JSON.stringify(body) });
+}
+export async function shareWishlistToDiscord(token, body) {
+  return request('/discord/share/wishlist', { method: 'POST', headers: authHeaders(token), body: JSON.stringify(body) });
 }
 
 // ─── Safety ───────────────────────────────────────────────────────────────────

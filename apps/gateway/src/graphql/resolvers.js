@@ -92,6 +92,24 @@ export const resolvers = {
       }
     },
 
+    achievements: async (_, __, { clients, logger }) => {
+      try { return await clients.users.getAllAchievements() ?? []; }
+      catch (e) { logger.warn(`achievements failed: ${e.message}`); return []; }
+    },
+    myAchievements: async (_, __, { token, clients, logger }) => {
+      try { return await clients.users.getMyAchievements(token) ?? []; }
+      catch (e) { logger.warn(`myAchievements failed: ${e.message}`); return []; }
+    },
+
+    discordShareGuilds: async (_, __, { token, clients, logger }) => {
+      try { return await clients.users.getDiscordShareGuilds(token) ?? []; }
+      catch (e) { logger.warn(`discordShareGuilds: ${e.message}`); return []; }
+    },
+    discordShareChannels: async (_, { guildId }, { token, clients, logger }) => {
+      try { return await clients.users.getDiscordShareChannels(token, guildId) ?? []; }
+      catch (e) { logger.warn(`discordShareChannels: ${e.message}`); return []; }
+    },
+
     // ── Collection ──────────────────────────────────────────────────────────────
 
     myCollection: async (_, __, { token, req, clients }) =>
@@ -1288,6 +1306,39 @@ export const resolvers = {
         logger.warn(`grantReward failed: ${error.message}`);
         throw error;
       }
+    },
+
+    adminGrantAchievement: async (_, args, { token, clients, logger }) => {
+      try { return await clients.users.adminGrantAchievement(token, args); }
+      catch (e) { logger.warn(`adminGrantAchievement failed: ${e.message}`); throw e; }
+    },
+
+    shareCollectionToDiscord: async (_, args, { token, clients, logger }) => {
+      try { await clients.users.shareCollectionToDiscord(token, args); return true; }
+      catch (e) { logger.warn(`shareCollectionToDiscord: ${e.message}`); throw e; }
+    },
+    shareWishlistToDiscord: async (_, args, { token, clients, logger }) => {
+      try { await clients.users.shareWishlistToDiscord(token, args); return true; }
+      catch (e) { logger.warn(`shareWishlistToDiscord: ${e.message}`); throw e; }
+    },
+
+    createCartOrders: async (_, { items }, { token, clients, logger }) => {
+      const orders = [];
+      const errors = [];
+      for (const item of items) {
+        try {
+          const order = await clients.marketplace.buyListing(token, item.listingId, {
+            buyerAddress: item.buyerAddress,
+            shippingRateId: item.shippingRateId,
+            shipmentId: item.shipmentId,
+          });
+          orders.push(order);
+        } catch (err) {
+          logger.warn(`createCartOrders: item ${item.listingId} failed: ${err.message}`);
+          errors.push({ listingId: item.listingId, error: err.message });
+        }
+      }
+      return { orders, errors };
     },
 
     // ── Safety mutations ──────────────────────────────────────────────────────────

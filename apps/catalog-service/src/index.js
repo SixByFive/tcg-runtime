@@ -61,6 +61,7 @@ async function start() {
     await seedSetAliases(logger);
 
     await Scheduler.init();
+    await Scheduler.ensureGlobalTasks();
     logger.info('Scheduler initialised');
 
     app.listen(port, () => {

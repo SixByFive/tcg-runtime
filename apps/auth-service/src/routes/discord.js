@@ -100,6 +100,24 @@ router.get('/callback', async (req, res) => {
   const returnPath = normalizeReturnPath(parsed.r);
   if (!userId) return res.status(400).send('Missing user in state');
 
+  // Verify user can still connect Discord (capability may have changed since /start)
+  try {
+    const profileRes = await fetch(
+      `${process.env.USER_SERVICE_URL || 'http://localhost:4021'}/users/profile-by-id/${encodeURIComponent(userId)}`,
+      { headers: { 'x-internal-key': process.env.INTERNAL_API_KEY || '' } },
+    );
+    if (profileRes.ok) {
+      const profile = await profileRes.json();
+      const level = profile?.restrictionLevel ?? 'none';
+      if (level === 'child') {
+        const sep = returnPath.includes('?') ? '&' : '?';
+        return res.redirect(`${FRONTEND_BASE()}${returnPath}${sep}linked=discord&error=not_permitted`);
+      }
+    }
+  } catch {
+    // Non-fatal — if we can't check, allow (fail open)
+  }
+
   try {
     const token = await exchangeCodeForToken(String(code));
     const me    = await fetchDiscordMe(token.access_token);
@@ -124,6 +142,21 @@ router.get('/callback', async (req, res) => {
     const sep = returnPath.includes('?') ? '&' : '?';
     return res.redirect(`${FRONTEND_BASE()}${returnPath}${sep}linked=discord&error=linking_failed`);
   }
+});
+
+// GET /auth/discord/bot-invite — generate Discord bot invite URL
+router.get('/bot-invite', requireAuth, (req, res) => {
+  const clientId   = process.env.DISCORD_CLIENT_ID;
+  const perms      = process.env.DISCORD_BOT_PERMISSIONS || '536879104'; // Send Messages + Embed Links + Read Message History
+  const guildId    = req.query.guildId;
+  if (!clientId) return res.status(503).json({ error: 'Discord bot not configured' });
+  const params = new URLSearchParams({
+    client_id:   clientId,
+    permissions: perms,
+    scope:       'bot applications.commands',
+    ...(guildId ? { guild_id: String(guildId) } : {}),
+  });
+  res.json({ url: `https://discord.com/api/oauth2/authorize?${params.toString()}` });
 });
 
 // ---- POST /auth/discord/unlink -------------------------------------------

@@ -12,6 +12,10 @@ export const typeDefs = gql`
     userById(id: ID!): UserProfile
     searchUsers(q: String!, limit: Int): [PublicUser!]!
     userAchievements(userId: ID!): [UserAchievement!]!
+    achievements: [Achievement!]!
+    myAchievements: [UserAchievement!]!
+    discordShareGuilds: [DiscordGuild!]!
+    discordShareChannels(guildId: String!): [DiscordChannel!]!
 
     # ── Collection ──────────────────────────────────────────────────────────────
     myCollection: [CollectionEntry!]!
@@ -223,6 +227,12 @@ export const typeDefs = gql`
     createOffer(listingId: ID!, amount: Float!, message: String): Offer!
     respondToOffer(offerId: ID!, action: String!, counterAmount: Float, counterMessage: String, buyerAddress: JSON): RespondToOfferResult!
     withdrawOffer(offerId: ID!): Boolean!
+
+    # ── Admin ─────────────────────────────────────────────────────────────────────
+    adminGrantAchievement(userId: ID!, achievementId: ID!, data: JSON): UserAchievement!
+    shareCollectionToDiscord(guildId: String!, channelId: String!, cardId: String!, cardName: String!, variation: String, quantity: Int, imageUrl: String): Boolean!
+    shareWishlistToDiscord(guildId: String!, channelId: String!, cardId: String!, cardName: String!, variation: String, imageUrl: String): Boolean!
+    createCartOrders(items: [CartItemInput!]!): CartOrderResult!
 
     # ── Admin ─────────────────────────────────────────────────────────────────────
     adminBanUser(id: ID!): Boolean!
@@ -1214,6 +1224,37 @@ export const typeDefs = gql`
     image_large: String
     supertype: String
     subtype: String
+  }
+
+  # ── Discord Share ─────────────────────────────────────────────────────────────
+
+  type DiscordGuild {
+    id: String!
+    name: String!
+    icon: String
+    botPresent: Boolean
+  }
+  type DiscordChannel {
+    id: String!
+    name: String!
+    type: Int
+  }
+
+  # ── Cart checkout ─────────────────────────────────────────────────────────────
+
+  input CartItemInput {
+    listingId: ID!
+    buyerAddress: JSON!
+    shippingRateId: String
+    shipmentId: String
+  }
+  type CartOrderError {
+    listingId: ID!
+    error: String!
+  }
+  type CartOrderResult {
+    orders: [Order!]!
+    errors: [CartOrderError!]!
   }
 
   scalar JSON

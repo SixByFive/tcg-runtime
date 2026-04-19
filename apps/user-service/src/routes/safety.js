@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { createHash, randomBytes } from 'crypto';
 import { requireAuth, requireAdmin } from '@sbf/auth';
 import { Profile } from '../models/index.js';
 
@@ -102,9 +103,26 @@ router.post('/request-parent-verification', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'Parent verification only required for accounts aged 13–15' });
     }
 
-    // Email delivery is fire-and-forget via notifications-service's internal endpoint
-    // The verification token would be sent via email; for now we log intent
-    // TODO: integrate with notifications-service email delivery once token flow is built
+    const rawToken = randomBytes(32).toString('hex');
+    const tokenHash = createHash('sha256').update(rawToken).digest('hex');
+    const expiry = new Date(Date.now() + 48 * 60 * 60 * 1000);
+    await profile.update({ parentVerificationToken: tokenHash, parentVerificationTokenExpiry: expiry });
+
+    const verifyUrl = (process.env.API_BASE_URL || 'http://localhost:4021') + '/parent-verify?uid=' + req.user.sub + '&token=' + rawToken;
+    const notifUrl = (process.env.NOTIFICATIONS_SERVICE_URL || 'http://localhost:4016') + '/internal/notify';
+    fetch(notifUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-internal-key': process.env.INTERNAL_API_KEY || '' },
+      body: JSON.stringify({
+        userId: req.user.sub,
+        type: 'PARENT_VERIFY_REQUEST',
+        title: 'Parent verification requested',
+        body: `Your child has requested parental verification. Click to approve: ${verifyUrl}`,
+        userEmail: profile.parentEmail,
+        isSilent: true,
+      }),
+    }).catch(() => {});
+
     res.json({ ok: true, message: 'Verification email sent to parent' });
   } catch (err) {
     res.status(500).json({ error: err.message });

@@ -1,0 +1,60 @@
+name: Publish API packages
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      # Re-publish whenever the schema, types, or client changes
+      - 'apps/gateway/src/graphql/schema.js'
+      - 'packages/api-types/**'
+      - 'packages/api-client/**'
+
+jobs:
+  publish:
+    name: Build & publish to GitHub Packages
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://npm.pkg.github.com
+          scope: '@sbf'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Bump patch version automatically so every push produces a new version.
+      # For proper semver control, remove this step and manage versions manually.
+      - name: Bump patch versions
+        run: |
+          cd packages/api-types  && npm version patch --no-git-tag-version
+          cd ../api-client       && npm version patch --no-git-tag-version
+
+      - name: Build @sbf/api-types
+        run: pnpm --filter @sbf/api-types build
+
+      - name: Build @sbf/api-client
+        run: pnpm --filter @sbf/api-client build
+
+      - name: Publish @sbf/api-types
+        run: pnpm --filter @sbf/api-types publish --no-git-checks
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish @sbf/api-client
+        run: pnpm --filter @sbf/api-client publish --no-git-checks
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
