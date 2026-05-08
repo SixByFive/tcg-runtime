@@ -11,7 +11,7 @@ import { getRates } from '../services/shipping.service.js';
 import {
   createEscrowPaymentIntent, calculateFee,
 } from '../services/stripe.service.js';
-import { notifyUser, NotificationType } from '@sbf/contracts';
+import { notifyUser, NotificationType, checkCapabilities } from '@sbf/contracts';
 
 const router = Router();
 
@@ -86,6 +86,21 @@ router.post('/', requireAuth, async (req, res) => {
   }
 
   try {
+    // Enforce subscription listing limit
+    const caps = await checkCapabilities(req.user.sub);
+    if (caps.maxActiveListings !== null) {
+      const activeCount = await CardListing.count({
+        where: { sellerId: req.user.sub, status: { [Op.in]: ['ACTIVE', 'PENDING_PROOF'] } },
+      });
+      if (activeCount >= caps.maxActiveListings) {
+        return res.status(403).json({
+          error: 'Listing limit reached',
+          limit: caps.maxActiveListings,
+          plan: caps.planName,
+        });
+      }
+    }
+
     // Check seller has completed Stripe onboarding
     const sellerProfile = await SellerProfile.findByPk(req.user.sub);
     const stripeAccountId = sellerProfile?.stripeOnboardingComplete

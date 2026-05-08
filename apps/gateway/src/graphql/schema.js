@@ -60,8 +60,8 @@ export const typeDefs = gql`
     adminQueryReportedUsers(page: Int, pageSize: Int, isCleared: Boolean): [ReportedUser!]!
 
     # ── Marketplace ───────────────────────────────────────────────────────────────
-    listings(type: ListingType, cardId: String, sellerId: ID, condition: String, status: ListingStatus, minPrice: Float, maxPrice: Float, limit: Int, offset: Int): [Listing!]!
-    listing(id: ID!): Listing
+    listings(type: ListingType, cardId: String, sellerId: ID, condition: String, status: ListingStatus, minPrice: Float, maxPrice: Float, limit: Int, offset: Int): [ListingBase!]!
+    listing(id: ID!): ListingBase
     myOrders(role: String, limit: Int, offset: Int): [Order!]!
     order(id: ID!): Order
     sellerStatus: SellerStatus!
@@ -76,6 +76,7 @@ export const typeDefs = gql`
     # ── Subscriptions / Payments ─────────────────────────────────────────────────
     subscriptionPlans: [SubscriptionPlan!]!
     mySubscription: UserSubscription
+    myCapabilities: UserCapabilities!
     subscriptionPortal: SubscriptionPortal
     myTransactions(page: Int, pageSize: Int): [PaymentTransaction!]!
 
@@ -146,6 +147,7 @@ export const typeDefs = gql`
       discord: String
     ): UserProfile!
     deleteAccount(password: String, confirm: String!): Boolean!
+    exportUserData(password: String): String
 
     register(
       username: String!
@@ -217,6 +219,7 @@ export const typeDefs = gql`
     adminUnbanUserFromTrading(userId: ID!): Boolean!
 
     # ── Binder (slot) ─────────────────────────────────────────────────────────────
+    addBinderPage(binderId: ID!, input: BinderPageInput!): BinderPageType!
     addCardToBinder(pageId: ID!, input: BinderSlotInput!): BinderSlot!
 
     # ── Marketplace ───────────────────────────────────────────────────────────────
@@ -615,6 +618,23 @@ export const typeDefs = gql`
 
   # ── Marketplace ───────────────────────────────────────────────────────────────
 
+  """
+  Common interface implemented by every listing type (card, product).
+  Querying shared fields at the top level of a listings result is valid
+  because both CardListing and ProductListing implement this interface.
+  """
+  interface ListingBase {
+    id: ID!
+    type: String
+    price: Float
+    currency: String
+    quantity: Int
+    allowOffers: Boolean
+    status: String
+    createdAt: String
+    updatedAt: String
+  }
+
   enum ListingStatus {
     PENDING_PROOF
     ACTIVE
@@ -623,14 +643,17 @@ export const typeDefs = gql`
     REMOVED
   }
 
-  type CardListing {
+  type CardListing implements ListingBase {
     id: ID!
+    type: String
     sellerId: ID
+    seller: PublicUser
     cardId: String
     title: String
     description: String
     condition: String
     variant: String
+    variation: String
     price: Float
     currency: String
     quantity: Int
@@ -659,7 +682,7 @@ export const typeDefs = gql`
     # Nested objects
     buyer: PublicUser
     seller: PublicUser
-    listing: Listing
+    listing: ListingBase
     # Stripe client secret — present immediately after createOrderFromListing
     clientSecret: String
     # Raw model fields
@@ -672,6 +695,7 @@ export const typeDefs = gql`
     shippingCost: Float
     totalAmount: Float
     currency: String
+    status: String
     paymentStatus: String
     fulfilmentStatus: String
     trackingNumber: String
@@ -722,8 +746,6 @@ export const typeDefs = gql`
     counterAmount: Float
   }
 
-  union Listing = CardListing | ProductListing
-
   enum ListingType {
     CARD
     PRODUCT
@@ -736,8 +758,9 @@ export const typeDefs = gql`
     sold: Int
   }
 
-  type ProductListing {
+  type ProductListing implements ListingBase {
     id: ID!
+    type: String
     title: String
     description: String
     imageUrl: String
@@ -753,6 +776,7 @@ export const typeDefs = gql`
     currency: String
     quantity: Int
     status: String
+    allowOffers: Boolean
     createdAt: String
     updatedAt: String
   }
@@ -894,6 +918,8 @@ export const typeDefs = gql`
     title: String
     layout: String!
     pageOrder: Int!
+    createdAt: String
+    updatedAt: String
     slots: [BinderSlot!]
   }
 
@@ -926,6 +952,7 @@ export const typeDefs = gql`
     id: ID
     layout: String
     title: String
+    pageOrder: Int
     slots: [BinderSlotInput!]
   }
 
@@ -943,15 +970,36 @@ export const typeDefs = gql`
     id: ID!
     name: String
     description: String
+    price: Float
     priceMonthly: Float
     priceYearly: Float
     currency: String
+    interval: String
+    platformFeePercent: Float
+    feeDiscount: Int
+    maxBinders: Int
+    maxCollectionCards: Int
+    maxActiveListings: Int
+    maxActiveTrades: Int
     features: JSON
+    featuresJson: JSON
     isActive: Boolean
+    active: Boolean
+    sortOrder: Int
     stripePriceIdMonthly: String
     stripePriceIdYearly: String
     createdAt: String
     updatedAt: String
+  }
+
+  type UserCapabilities {
+    planName: String!
+    platformFeePercent: Float!
+    maxBinders: Int
+    maxCollectionCards: Int
+    maxActiveListings: Int
+    maxActiveTrades: Int
+    features: JSON
   }
 
   type UserSubscription {
@@ -1216,14 +1264,17 @@ export const typeDefs = gql`
 
   type CatalogCard {
     id: ID
+    cardId: String
     name: String
     number: String
-    set_code: String
+    setCode: String
     rarity: String
-    image_small: String
-    image_large: String
     supertype: String
     subtype: String
+    images: CardImage
+    set: CardSetRef
+    variants: [CardVariant]
+    latestPrices: [CardPrice]
   }
 
   # ── Discord Share ─────────────────────────────────────────────────────────────

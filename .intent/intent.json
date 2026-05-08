@@ -1,0 +1,6 @@
+{
+  "version": "1",
+  "project": "SixByFive TCG Runtime",
+  "systems": ["sys-gateway", "sys-auth", "sys-catalog", "sys-collections", "sys-marketplace", "sys-messaging", "sys-infra", "sys-shared-packages"],
+  "created": "2026-05-08T15:21:56.678Z"
+}

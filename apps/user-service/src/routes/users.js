@@ -23,7 +23,7 @@ router.get('/statuses', (_req, res) => {
 
 router.get('/me', requireAuth, async (req, res) => {
   try {
-    const user = await User.findByPk(req.user.id, {
+    const user = await User.findByPk(req.user.sub, {
       attributes: { exclude: ['password'] },
       include: [
         { model: Profile, as: 'profile' },
@@ -47,7 +47,7 @@ router.get('/me', requireAuth, async (req, res) => {
 
 router.patch('/me', requireAuth, async (req, res) => {
   const ALLOWED = [
-    'bio', 'favouritePokemon', 'country', 'showcase', 'status',
+    'avatar', 'bio', 'favouritePokemon', 'country', 'showcase', 'status',
     'address1', 'address2', 'city', 'postcode', 'state',
     'phone', 'discord', 'publicProfile', 'wantsTrade', 'wantsMarketplace',
   ];
@@ -62,8 +62,8 @@ router.patch('/me', requireAuth, async (req, res) => {
     }
 
     const [profile] = await Profile.findOrCreate({
-      where: { userId: req.user.id },
-      defaults: { userId: req.user.id },
+      where: { userId: req.user.sub },
+      defaults: { userId: req.user.sub },
     });
 
     await profile.update(updates);
@@ -82,7 +82,7 @@ router.delete('/me', requireAuth, async (req, res) => {
   }
 
   try {
-    const user = await User.findByPk(req.user.id);
+    const user = await User.findByPk(req.user.sub);
     if (!user) return res.status(404).json({ error: 'User not found' });
 
     if (user.password) {
@@ -91,8 +91,8 @@ router.delete('/me', requireAuth, async (req, res) => {
       if (!ok) return res.status(401).json({ error: 'Incorrect password' });
     }
 
-    await Profile.destroy({ where: { userId: req.user.id } });
-    await UserReputation.destroy({ where: { userId: req.user.id } });
+    await Profile.destroy({ where: { userId: req.user.sub } });
+    await UserReputation.destroy({ where: { userId: req.user.sub } });
     await user.destroy();
 
     res.clearCookie('sbf_access');
@@ -107,13 +107,13 @@ router.delete('/me', requireAuth, async (req, res) => {
 
 router.get('/me/export', requireAuth, async (req, res) => {
   try {
-    const user = await User.findByPk(req.user.id, {
+    const user = await User.findByPk(req.user.sub, {
       attributes: { exclude: ['password'] },
       include: [{ model: Profile, as: 'profile' }],
     });
     if (!user) return res.status(404).json({ error: 'User not found' });
 
-    res.setHeader('Content-Disposition', `attachment; filename="export-${req.user.id}.json"`);
+    res.setHeader('Content-Disposition', `attachment; filename="export-${req.user.sub}.json"`);
     res.json({ exportedAt: new Date(), user });
   } catch (err) {
     res.status(500).json({ error: err.message });

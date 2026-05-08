@@ -5,6 +5,7 @@ import { getSequelize } from '@sbf/database';
 import { Card, CardVariant } from '../models/index.js';
 import { fetchSetAndCards } from '../adapters/tcgdex.adapter.js';
 import { upsertSet } from '../services/upsert.service.js';
+import { invalidateSetCache } from '../services/search.service.js';
 
 export async function ingestSet({ input, refresh = false, dryRun = false } = {}) {
   if (!input) throw new Error('ingestSet: input is required');
@@ -108,6 +109,7 @@ export async function ingestSet({ input, refresh = false, dryRun = false } = {})
     result.counts.variants.upserted = desired.length;
   });
 
+  invalidateSetCache();
   result.ms = Date.now() - started;
   return result;
 }

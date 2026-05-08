@@ -4,7 +4,7 @@
 import { Set } from '../models/index.js';
 
 // Maps tcgdex code → our internal abbreviation.
-const ALIASES = Object.freeze({
+export const ALIASES = Object.freeze({
   'me01': 'MEG',  'me02': 'PFL',   'me2.5': 'ASC',  'me03': 'POR',
   'svp':  'SVP',  'sv01': 'SVI',   'sv02':  'PAL',   'sv03':  'OBF',
   'sv03.5': 'MEW','sv04': 'PAR',   'sv04.5':'PAF',   'sv05':  'TEF',

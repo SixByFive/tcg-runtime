@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { searchCards, getCard } from '../services/search.service.js';
+import { searchCards, getCard, getCardsByIds } from '../services/search.service.js';
 
 const router = Router();
 
@@ -17,6 +17,18 @@ router.get('/', async (req, res) => {
       pageSize: pageSize ? Number(pageSize) : 50,
     });
     res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /cards/batch — fetch multiple cards by ID (used by gateway for collection hydration)
+router.post('/batch', async (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || !ids.length) return res.json([]);
+    const cards = await getCardsByIds(ids);
+    res.json(cards);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

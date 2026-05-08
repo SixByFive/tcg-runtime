@@ -224,7 +224,7 @@ router.post('/refresh', async (req, res) => {
   }
 
   setAuthCookies(res, { accessToken, refreshToken: newRefreshToken });
-  return res.json({ user: safeUser(user) });
+  return res.json({ accessToken, user: safeUser(user) });
 });
 
 // ─── Me ──────────────────────────────────────────────────────────────────────

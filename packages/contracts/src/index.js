@@ -120,6 +120,51 @@ export async function pushRealtimeBroadcast(opts) {
   }
 }
 
+// ─── Subscription capabilities ────────────────────────────────────────────────
+
+const PAYMENTS_URL_CONTRACTS =
+  process.env.PAYMENTS_SERVICE_URL || 'http://localhost:4019';
+
+/**
+ * Fetch the subscription capability limits for a user.
+ * Returns free-tier defaults if no active subscription or the call fails.
+ *
+ * @param {string} userId
+ * @returns {Promise<{
+ *   planName: string,
+ *   platformFeePercent: number,
+ *   maxBinders: number|null,
+ *   maxCollectionCards: number|null,
+ *   maxActiveListings: number|null,
+ *   maxActiveTrades: number|null,
+ *   features: any[],
+ * }>}
+ */
+export async function checkCapabilities(userId) {
+  const key = process.env.INTERNAL_API_KEY;
+  const FREE_DEFAULTS = {
+    planName: 'Free',
+    platformFeePercent: 8,
+    maxBinders: 3,
+    maxCollectionCards: 500,
+    maxActiveListings: 5,
+    maxActiveTrades: 3,
+    features: [],
+  };
+
+  if (!key || !userId) return FREE_DEFAULTS;
+
+  try {
+    const res = await fetch(`${PAYMENTS_URL_CONTRACTS}/internal/capabilities/${encodeURIComponent(userId)}`, {
+      headers: { 'x-internal-key': key },
+    });
+    if (!res.ok) return FREE_DEFAULTS;
+    return await res.json();
+  } catch {
+    return FREE_DEFAULTS;
+  }
+}
+
 // ─── Notification type constants ──────────────────────────────────────────────
 
 export const NotificationType = {

@@ -54,14 +54,92 @@ export async function getSetByCode(code) {
 
 // ─── Cards ────────────────────────────────────────────────────────────────────
 
+/**
+ * Normalise a raw DB card row (snake_case) into the shape the GraphQL schema
+ * expects (camelCase with nested images/set/variants/latestPrices objects).
+ */
+function normaliseCard(c) {
+  return {
+    id:      c.id,
+    cardId:  c.id,
+    name:    c.name,
+    number:  c.number,
+    rarity:  c.rarity,
+    setCode: c.set_code,
+    images:
+      c.image_small || c.image_large
+        ? {
+            small: c.image_small ? `${c.image_small}/low.webp`  : null,
+            large: c.image_large ? `${c.image_large}/high.webp` : null,
+          }
+        : null,
+    set: c.Set
+      ? { code: c.Set.code, name: c.Set.name }
+      : null,
+    variants: (() => {
+      const vArr = Array.isArray(c.variants) && c.variants.length
+        ? c.variants
+        : Array.isArray(c.CardVariants) && c.CardVariants.length
+          ? c.CardVariants
+          : null;
+      return vArr
+        ? vArr.map((v) => ({ key: v.variant, label: v.display_name ?? v.variant, default: false }))
+        : null;
+    })(),
+    latestPrices:
+      Array.isArray(c.prices) && c.prices.length
+        ? c.prices.map((p) => ({
+            variation: p.variant    ?? null,
+            currency:  'GBP',
+            gbp:       p.amount_gbp != null ? Number(p.amount_gbp) : null,
+            market:    p.amount_gbp != null ? Number(p.amount_gbp) : null,
+            mid:       p.amount_gbp != null ? Number(p.amount_gbp) : null,
+            low:       null,
+            high:      null,
+            updatedAt: p.updated_at ?? null,
+            provider:  p.source     ?? 'unknown',
+          }))
+        : null,
+  };
+}
+
 export async function searchCards(input = {}) {
   const params = new URLSearchParams();
-  if (input.query)   params.set('query',   input.query);
-  if (input.setCode) params.set('setCode', input.setCode);
-  if (input.rarity)  params.set('rarity',  input.rarity);
-  if (input.limit)   params.set('limit',   String(input.limit));
-  if (input.offset)  params.set('offset',  String(input.offset));
-  return request(`/cards?${params.toString()}`, { method: 'GET' });
+
+  // Accept `name` (GraphQL field) or legacy `query`
+  const q = input.name || input.query;
+  if (q)            params.set('q',         q);
+  if (input.setCode) params.set('setCode',  input.setCode);
+  if (input.rarity)  params.set('rarity',   input.rarity);
+
+  // Pagination: GraphQL uses limit/offset, catalog-service uses pageSize/page
+  const limit  = input.limit  ?? 50;
+  const offset = input.offset ?? 0;
+  params.set('pageSize', String(limit));
+  params.set('page',     String(Math.floor(offset / limit) + 1));
+
+  // Always include prices so latestPrices is populated
+  params.set('withPrices', 'true');
+
+  const result = await request(`/cards?${params.toString()}`, { method: 'GET' });
+
+  // Normalise into the shape the resolver + GraphQL schema expect
+  const rawCards = result?.cards ?? result?.items ?? [];
+  return {
+    total:  result?.total  ?? 0,
+    limit,
+    offset,
+    items:  rawCards.map(normaliseCard),
+  };
+}
+
+export async function getCardsBatch(ids) {
+  if (!Array.isArray(ids) || !ids.length) return [];
+  const result = await request('/cards/batch', {
+    method: 'POST',
+    body: JSON.stringify({ ids }),
+  });
+  return Array.isArray(result) ? result.map(normaliseCard) : [];
 }
 
 export async function getCard(id, variant) {

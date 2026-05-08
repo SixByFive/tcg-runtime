@@ -26,7 +26,7 @@ router.get('/subscription/:userId', async (req, res) => {
         userId: req.params.userId,
         status: { [Op.in]: ['active', 'trialing'] },
       },
-      include: [{ model: SubscriptionPlan, as: 'plan', attributes: ['name', 'feeDiscount'] }],
+      include: [{ model: SubscriptionPlan, as: 'plan', attributes: ['name', 'feeDiscount', 'platformFeePercent'] }],
       order: [['createdAt', 'DESC']],
     });
 
@@ -39,6 +39,58 @@ router.get('/subscription/:userId', async (req, res) => {
       planName:         sub.plan?.name ?? null,
       feeDiscount:      sub.plan?.feeDiscount ?? 0,
       currentPeriodEnd: sub.currentPeriodEnd,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /internal/capabilities/:userId
+ *
+ * Returns the full set of tier limits for the user.
+ * null values mean unlimited. Free-tier defaults apply when no active subscription.
+ */
+router.get('/capabilities/:userId', async (req, res) => {
+  try {
+    const sub = await UserSubscription.findOne({
+      where: {
+        userId: req.params.userId,
+        status: { [Op.in]: ['active', 'trialing'] },
+      },
+      include: [{
+        model: SubscriptionPlan,
+        as: 'plan',
+        attributes: [
+          'name', 'platformFeePercent', 'feeDiscount',
+          'maxBinders', 'maxCollectionCards', 'maxActiveListings', 'maxActiveTrades',
+          'featuresJson',
+        ],
+      }],
+      order: [['createdAt', 'DESC']],
+    });
+
+    if (!sub?.plan) {
+      return res.json({
+        planName:           'Free',
+        platformFeePercent: 8,
+        maxBinders:         3,
+        maxCollectionCards: 500,
+        maxActiveListings:  5,
+        maxActiveTrades:    3,
+        features:           [],
+      });
+    }
+
+    const p = sub.plan;
+    res.json({
+      planName:           p.name,
+      platformFeePercent: Number(p.platformFeePercent),
+      maxBinders:         p.maxBinders,
+      maxCollectionCards: p.maxCollectionCards,
+      maxActiveListings:  p.maxActiveListings,
+      maxActiveTrades:    p.maxActiveTrades,
+      features:           p.featuresJson ?? [],
     });
   } catch (err) {
     res.status(500).json({ error: err.message });

@@ -2,13 +2,12 @@ import { Router } from 'express';
 import { Op } from 'sequelize';
 import { requireAuth, requireAdmin } from '../middleware/requireAuth.js';
 import { Binder, BinderPage, BinderSlot, Collection, Card, sequelize } from '../models/index.js';
+import { checkCapabilities } from '@sbf/contracts';
 
 const router = Router();
 
 const DEFAULT_PAGE_SIZE = 20;
 
-// Tier limits — wired to env so subscriptions-service can override later
-const FREE_BINDER_LIMIT = Number(process.env.BINDER_LIMIT_FREE ?? 3);
 const FREE_PAGES_PER_BINDER = Number(process.env.BINDER_PAGES_PER_BINDER_FREE ?? 20);
 
 function slugify(str) {
@@ -45,11 +44,12 @@ function fullBinderInclude() {
   ];
 }
 
-// GET /binder — my binders (no pages/slots for list performance)
+// GET /binder — my binders (includes pages + slots for editor hydration)
 router.get('/', requireAuth, async (req, res) => {
   try {
     const binders = await Binder.findAll({
       where: { userId: req.user.sub, isDeleted: false },
+      include: fullBinderInclude(),
       order: [['createdAt', 'DESC']],
     });
     res.json(binders);
@@ -123,9 +123,16 @@ router.get('/:idOrSlug', async (req, res) => {
 // POST /binder — create binder
 router.post('/', requireAuth, async (req, res) => {
   try {
-    const count = await Binder.count({ where: { userId: req.user.sub, isDeleted: false } });
-    if (count >= FREE_BINDER_LIMIT) {
-      return res.status(403).json({ error: 'Binder limit reached' });
+    const caps = await checkCapabilities(req.user.sub);
+    if (caps.maxBinders !== null) {
+      const count = await Binder.count({ where: { userId: req.user.sub, isDeleted: false } });
+      if (count >= caps.maxBinders) {
+        return res.status(403).json({
+          error: 'Binder limit reached',
+          limit: caps.maxBinders,
+          plan: caps.planName,
+        });
+      }
     }
 
     const { name, description, coverColor, accentColor, visibility = 'public' } = req.body;

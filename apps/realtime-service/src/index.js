@@ -38,10 +38,22 @@ const server = http.createServer(app);
 // ─── Socket.IO ────────────────────────────────────────────────────────────────
 // The frontend connects Socket.IO to /realtime/socket.io.
 
+const allowedSioOrigins = [
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
+  ...(process.env.FRONTEND_URL ? [process.env.FRONTEND_URL] : []),
+  ...(process.env.CORS_ORIGINS
+    ? process.env.CORS_ORIGINS.split(',').map((o) => o.trim()).filter(Boolean)
+    : []),
+];
+
 const io = new SocketIO(server, {
   path: '/realtime/socket.io',
   cors: {
-    origin: process.env.FRONTEND_URL || '*',
+    origin: (origin, callback) => {
+      if (!origin || allowedSioOrigins.includes(origin)) return callback(null, true);
+      callback(new Error(`CORS: origin ${origin} not allowed`));
+    },
     credentials: true,
   },
   // Allow token via query param, cookie, or Authorization header

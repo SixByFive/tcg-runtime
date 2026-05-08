@@ -201,6 +201,14 @@ export async function saveBinderPagesAndSlots(token, req, id, pages) {
   });
 }
 
+export async function addBinderPage(token, req, binderId, input) {
+  return request(`/binder/${encodeURIComponent(binderId)}/pages`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+    headers: authHeaders(token, req),
+  });
+}
+
 export async function addCardToBinder(token, req, pageId, input) {
   return request(`/binder/pages/${encodeURIComponent(pageId)}/slots`, {
     method: 'POST',

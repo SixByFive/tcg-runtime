@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { Op } from 'sequelize';
 import rateLimit from 'express-rate-limit';
 import { requireAuth } from '@sbf/auth';
-import { notifyUser, NotificationType } from '@sbf/contracts';
+import { notifyUser, NotificationType, checkCapabilities } from '@sbf/contracts';
 import {
   Trade, TradeCard, TradeProof, TradeDispute,
   TradeBan, sequelize,
@@ -158,6 +158,24 @@ router.post('/', checkNotBanned, initiateMinuteLimiter, initiateDayLimiter, asyn
   if (userId === req.user.sub) return res.status(400).json({ error: 'Cannot trade with yourself' });
   if (!offeredCards.length && !wantedCards.length) {
     return res.status(400).json({ error: 'At least one card must be offered or requested' });
+  }
+
+  // Enforce subscription active trade limit
+  const caps = await checkCapabilities(req.user.sub);
+  if (caps.maxActiveTrades !== null) {
+    const activeCount = await Trade.count({
+      where: {
+        partyAId: req.user.sub,
+        status: { [Op.notIn]: ['COMPLETED', 'CANCELLED'] },
+      },
+    });
+    if (activeCount >= caps.maxActiveTrades) {
+      return res.status(403).json({
+        error: 'Active trade limit reached',
+        limit: caps.maxActiveTrades,
+        plan: caps.planName,
+      });
+    }
   }
 
   const t = await sequelize.transaction();

@@ -125,6 +125,9 @@ importers:
       '@sbf/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@sbf/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@sbf/database':
         specifier: workspace:*
         version: link:../../packages/database

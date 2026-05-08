@@ -63,6 +63,29 @@ export async function adminUpdatePlan(token, id, input) {
   });
 }
 
+// ─── Capabilities ─────────────────────────────────────────────────────────────
+
+export async function getMyCapabilities(userId) {
+  const key = process.env.INTERNAL_API_KEY;
+  const FREE_DEFAULTS = {
+    planName: 'Free',
+    platformFeePercent: 8,
+    maxBinders: 3,
+    maxCollectionCards: 500,
+    maxActiveListings: 5,
+    maxActiveTrades: 3,
+    features: [],
+  };
+  if (!userId) return FREE_DEFAULTS;
+  try {
+    return await request(`/internal/capabilities/${encodeURIComponent(userId)}`, {
+      headers: key ? { 'x-internal-key': key } : {},
+    });
+  } catch {
+    return FREE_DEFAULTS;
+  }
+}
+
 // ─── Subscriptions ────────────────────────────────────────────────────────────
 
 export async function getMySubscription(token) {

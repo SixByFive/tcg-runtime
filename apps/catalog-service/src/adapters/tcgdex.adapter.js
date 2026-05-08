@@ -1,7 +1,7 @@
 // TCGdex adapter — fetch set metadata + cards from TCGdex v2 API.
 // Uses native fetch (Node 20+). No file cache in new service (DB is source of truth).
 
-import { normalizeSetFromTcgdex, normalizeCardFromTcgdex, detectVariantsForCard } from '../services/normalizer.service.js';
+import { normalizeSetFromTcgdex, normalizeCardFromTcgdex, detectVariantsWithNames } from '../services/normalizer.service.js';
 import { resolveSet } from '../services/set.service.js';
 
 const BASE = process.env.TCGDEX_BASE || 'https://api.tcgdex.net/v2';
@@ -79,8 +79,8 @@ export async function fetchSetAndCards(input) {
         ? rawCards.cards
         : [];
 
-  // Hydrate detail for cards lacking variant metadata
-  const needsDetail = cardList.filter(c => !c?.variants && !c?.Variants);
+  // Hydrate detail for cards lacking full variant metadata (need variants_detailed for foil sub-variants)
+  const needsDetail = cardList.filter(c => !c?.variants_detailed && !c?.variants && !c?.Variants);
   const hydratedMap = new Map();
   if (needsDetail.length) {
     const detailed = await hydrateCardDetails(needsDetail, tcgdexCode);
@@ -106,10 +106,10 @@ export async function fetchSetAndCards(input) {
     // Exclude cards that resolved to a different set
     if (!card.id.startsWith(`${set.code}-`)) continue;
     cards.push(card);
-    variantsByCardId[card.id] = detectVariantsForCard(raw).map(v => ({
+    variantsByCardId[card.id] = detectVariantsWithNames(raw).map(({ variant, display_name }) => ({
       card_id: card.id,
-      variant: v,
-      display_name: v,
+      variant,
+      display_name,
     }));
   }
 

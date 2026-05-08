@@ -69,6 +69,64 @@ export async function createApp({ logger }) {
   // Apply CORS globally before all other middleware.
   app.use(cors(corsOptions));
 
+  // ── Media / upload proxy ──────────────────────────────────────────────────
+  // Must be registered BEFORE express.json() so the raw multipart body is
+  // still available as a readable stream (express.json only parses JSON, but
+  // better to be explicit about ordering).
+  const MEDIA_URL = process.env.MEDIA_SERVICE_URL || 'http://media-service:4017';
+
+  // Proxy static media files: GET /uploads/* → media-service /uploads/*
+  app.use('/uploads', async (req, res) => {
+    const target = `${MEDIA_URL}/uploads${req.url}`;
+    try {
+      const upstream = await fetch(target, { method: 'GET' });
+      if (!upstream.ok) {
+        return res.status(upstream.status).end();
+      }
+      const contentType = upstream.headers.get('content-type') || 'application/octet-stream';
+      const cacheControl = upstream.headers.get('cache-control');
+      res.status(upstream.status);
+      res.setHeader('content-type', contentType);
+      if (cacheControl) res.setHeader('cache-control', cacheControl);
+      res.send(Buffer.from(await upstream.arrayBuffer()));
+    } catch (err) {
+      logger.warn(`uploads proxy error: ${err.message}`);
+      res.status(502).json({ error: 'media-service unavailable' });
+    }
+  });
+
+  app.use('/upload', async (req, res) => {
+    const target = `${MEDIA_URL}/upload${req.url}`;
+    try {
+      // Collect raw body (express hasn't consumed multipart streams)
+      const body = await new Promise((resolve, reject) => {
+        const chunks = [];
+        req.on('data', (chunk) => chunks.push(chunk));
+        req.on('end', () => resolve(Buffer.concat(chunks)));
+        req.on('error', reject);
+      });
+
+      const forwardHeaders = {};
+      if (req.headers.authorization)        forwardHeaders.authorization        = req.headers.authorization;
+      if (req.headers['content-type'])      forwardHeaders['content-type']      = req.headers['content-type'];
+      if (req.headers['x-current-avatar'])  forwardHeaders['x-current-avatar']  = req.headers['x-current-avatar'];
+
+      const upstream = await fetch(target, {
+        method: req.method,
+        headers: forwardHeaders,
+        body: req.method !== 'GET' && req.method !== 'HEAD' ? body : undefined,
+      });
+
+      const contentType = upstream.headers.get('content-type') || '';
+      res.status(upstream.status);
+      if (contentType) res.setHeader('content-type', contentType);
+      res.send(Buffer.from(await upstream.arrayBuffer()));
+    } catch (err) {
+      logger.warn(`upload proxy error: ${err.message}`);
+      res.status(502).json({ error: 'media-service unavailable' });
+    }
+  });
+
   app.use(express.json());
 
   app.get('/health', (_req, res) => {
@@ -108,6 +166,103 @@ export async function createApp({ logger }) {
         name: dbConfig.name,
       },
     });
+  });
+
+  // ── Auth REST proxy ───────────────────────────────────────────────────────
+  // Proxies auth REST endpoints that the browser calls directly
+  // (logout, email verification, Discord OAuth) to auth-service.
+  const AUTH_URL = process.env.AUTH_SERVICE_URL || 'http://localhost:4011';
+
+  app.use('/auth', async (req, res) => {
+    const target = `${AUTH_URL}/auth${req.url}`;
+    try {
+      const forwardHeaders = { 'Content-Type': 'application/json' };
+      if (req.headers.authorization) forwardHeaders.authorization = req.headers.authorization;
+      if (req.headers.cookie) forwardHeaders.cookie = req.headers.cookie;
+
+      const isGet = req.method === 'GET' || req.method === 'HEAD';
+      const upstream = await fetch(target, {
+        method: req.method,
+        headers: forwardHeaders,
+        body: isGet ? undefined : JSON.stringify(req.body),
+        redirect: 'manual',
+      });
+
+      // Forward Set-Cookie headers (e.g. Discord OAuth flow sets cookies)
+      const setCookie = upstream.headers.get('set-cookie');
+      if (setCookie) res.setHeader('set-cookie', setCookie);
+
+      // Handle redirects from Discord OAuth callback
+      const location = upstream.headers.get('location');
+      if (location && upstream.status >= 300 && upstream.status < 400) {
+        return res.redirect(upstream.status, location);
+      }
+
+      const contentType = upstream.headers.get('content-type') || '';
+      res.status(upstream.status);
+      if (contentType) res.setHeader('content-type', contentType);
+      const body = await upstream.text();
+      res.send(body || '');
+    } catch (err) {
+      logger.warn(`auth proxy error: ${err.message}`);
+      res.status(502).json({ error: 'auth-service unavailable' });
+    }
+  });
+
+  // ── Checkout proxy ───────────────────────────────────────────────────────
+  // Forwards /checkout/* → payments-service /payments/*
+  const PAYMENTS_URL = process.env.PAYMENTS_SERVICE_URL || 'http://localhost:4019';
+
+  app.use('/checkout', async (req, res) => {
+    const target = `${PAYMENTS_URL}/payments${req.url === '/' ? '' : req.url}`;
+    try {
+      const forwardHeaders = { 'Content-Type': 'application/json' };
+      if (req.headers.authorization) forwardHeaders.authorization = req.headers.authorization;
+
+      const upstream = await fetch(target, {
+        method: req.method,
+        headers: forwardHeaders,
+        body: req.method !== 'GET' && req.method !== 'HEAD' ? JSON.stringify(req.body) : undefined,
+      });
+
+      const contentType = upstream.headers.get('content-type') || '';
+      res.status(upstream.status);
+      if (contentType) res.setHeader('content-type', contentType);
+      res.send(await upstream.text());
+    } catch (err) {
+      logger.warn(`checkout proxy error: ${err.message}`);
+      res.status(502).json({ error: 'payments-service unavailable' });
+    }
+  });
+
+  // ── Catalog admin proxy ───────────────────────────────────────────────────
+  // Forwards /catalog-admin/* → catalog-service /admin/* so the admin UI is
+  // reachable from the host via the gateway's published port.
+  const CATALOG_URL = process.env.CATALOG_SERVICE_URL || 'http://localhost:4012';
+  app.use('/catalog-admin', async (req, res) => {
+    const target = `${CATALOG_URL}/admin${req.url === '/' ? '/ui/' : req.url}`;
+    try {
+      const upstream = await fetch(target, {
+        method: req.method,
+        headers: {
+          'content-type': req.headers['content-type'] || 'application/json',
+          ...(req.headers['x-admin-key'] ? { 'x-admin-key': req.headers['x-admin-key'] } : {}),
+        },
+        body: ['GET', 'HEAD'].includes(req.method) ? undefined : JSON.stringify(req.body),
+      });
+      const contentType = upstream.headers.get('content-type') || '';
+      res.status(upstream.status);
+      if (contentType) res.setHeader('content-type', contentType);
+      if (contentType.includes('text') || contentType.includes('json') || contentType.includes('javascript')) {
+        res.send(await upstream.text());
+      } else {
+        const buf = await upstream.arrayBuffer();
+        res.send(Buffer.from(buf));
+      }
+    } catch (err) {
+      logger.warn(`catalog-admin proxy error: ${err.message}`);
+      res.status(502).json({ error: 'catalog-service unavailable' });
+    }
   });
 
   const apolloServer = new ApolloServer({

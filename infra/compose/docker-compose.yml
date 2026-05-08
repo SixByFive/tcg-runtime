@@ -42,6 +42,18 @@ services:
       NODE_ENV: production
       NODE_OPTIONS: --max-old-space-size=200
       DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN:-}
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY:-}
+      AUTH_SERVICE_URL: http://auth-service:4011
+      CATALOG_SERVICE_URL: http://catalog-service:4012
+      COLLECTIONS_SERVICE_URL: http://collections-service:4013
+      MARKETPLACE_SERVICE_URL: http://marketplace-service:4014
+      TRADING_SERVICE_URL: http://trading-service:4015
+      NOTIFICATIONS_SERVICE_URL: http://notifications-service:4016
+      MEDIA_SERVICE_URL: http://media-service:4017
+      PAYMENTS_SERVICE_URL: http://payments-service:4019
+      USER_SERVICE_URL: http://user-service:4021
+      MESSAGING_SERVICE_URL: http://messaging-service:4022
+      SHIPPING_SERVICE_URL: http://shipping-service:4023
     ports:
       - "4010:4010"
     depends_on:
@@ -81,6 +93,13 @@ services:
       NODE_ENV: production
       NODE_OPTIONS: --max-old-space-size=200
       DISCORD_TOKEN_SECRET: ${DISCORD_TOKEN_SECRET:-}
+      APP_URL: ${APP_URL:-http://localhost:3000}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-465}
+      SMTP_SECURE: ${SMTP_SECURE:-true}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      EMAIL_FROM: ${EMAIL_FROM:-noreply@sixbyfive.app}
     expose:
       - "4011"
     depends_on:
@@ -134,8 +153,8 @@ services:
       ADMIN_API_KEY: change_me_admin_key
       NODE_ENV: production
       NODE_OPTIONS: --max-old-space-size=256
-    expose:
-      - "4012"
+    ports:
+      - "4012:4012"
     mem_limit: 320m
     mem_reservation: 160m
     healthcheck:
@@ -207,6 +226,15 @@ services:
       ENV_PROFILE: docker
       NODE_ENV: production
       NODE_OPTIONS: --max-old-space-size=200
+      APP_URL: ${APP_URL:-https://tcg.sixbyfive.com}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-465}
+      SMTP_SECURE: ${SMTP_SECURE:-true}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      EMAIL_FROM: ${EMAIL_FROM:-noreply@sixbyfive.app}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:-}
     expose:
       - "4016"
     depends_on:
@@ -318,8 +346,8 @@ services:
       ENV_PROFILE: docker
       NODE_ENV: production
       NODE_OPTIONS: --max-old-space-size=148
-    expose:
-      - "4018"
+    ports:
+      - "4018:4018"
     depends_on:
       redis:
         condition: service_healthy

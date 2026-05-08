@@ -1,5 +1,53 @@
 import { checkDatabaseHealth } from '@sbf/database';
 
+/**
+ * Enrich collection/wishlist entries with full card data from the catalog service
+ * (variants, latestPrices, images, set). Handles both array and WishlistPage shapes.
+ * Falls back gracefully if the catalog call fails.
+ */
+async function hydrateCards(entriesOrPage, catalogClient, logger) {
+  const isPage = entriesOrPage
+    && typeof entriesOrPage === 'object'
+    && !Array.isArray(entriesOrPage)
+    && Array.isArray(entriesOrPage.entries);
+
+  const isSingle = entriesOrPage
+    && typeof entriesOrPage === 'object'
+    && !Array.isArray(entriesOrPage)
+    && !isPage;
+
+  const entries = isPage
+    ? entriesOrPage.entries
+    : isSingle
+      ? [entriesOrPage]
+      : Array.isArray(entriesOrPage)
+        ? entriesOrPage
+        : [];
+
+  if (!entries.length) return entriesOrPage;
+
+  const ids = [...new Set(entries.map(e => e.cardId).filter(Boolean))];
+  if (!ids.length) return entriesOrPage;
+
+  let catalogCards = [];
+  try {
+    catalogCards = await catalogClient.getCardsBatch(ids);
+  } catch (e) {
+    logger?.warn?.(`hydrateCards: batch fetch failed — ${e.message}`);
+    return entriesOrPage; // degrade gracefully: return entry with minimal card data
+  }
+
+  const cardMap = new Map(catalogCards.map(c => [c.id || c.cardId, c]));
+  const hydrated = entries.map(entry => ({
+    ...entry,
+    card: cardMap.get(entry.cardId) || entry.card || null,
+  }));
+
+  if (isPage)  return { ...entriesOrPage, entries: hydrated };
+  if (isSingle) return hydrated[0] ?? null;
+  return hydrated;
+}
+
 const JSONScalar = {
   __serialize(value)    { return value; },
   __parseValue(value)   { return value; },
@@ -112,25 +160,37 @@ export const resolvers = {
 
     // ── Collection ──────────────────────────────────────────────────────────────
 
-    myCollection: async (_, __, { token, req, clients }) =>
-      clients.collections.getMyCollection(token, req),
+    myCollection: async (_, __, { token, req, clients, logger }) => {
+      const entries = await clients.collections.getMyCollection(token, req);
+      return hydrateCards(entries, clients.catalog, logger);
+    },
 
-    collection: async (_, { userId }, { clients }) =>
-      clients.collections.getCollection(userId),
+    collection: async (_, { userId }, { clients, logger }) => {
+      const entries = await clients.collections.getCollection(userId);
+      return hydrateCards(entries, clients.catalog, logger);
+    },
 
-    collectionEntry: async (_, { cardId, variation }, { token, req, clients }) =>
-      clients.collections.getCollectionEntry(token, req, { cardId, variation }),
+    collectionEntry: async (_, { cardId, variation }, { token, req, clients, logger }) => {
+      const entry = await clients.collections.getCollectionEntry(token, req, { cardId, variation });
+      return entry ? hydrateCards(entry, clients.catalog, logger) : null;
+    },
 
     // ── Wishlist ────────────────────────────────────────────────────────────────
 
-    myWishlist: async (_, { page, pageSize }, { token, req, clients }) =>
-      clients.collections.getMyWishlist(token, req, { page, pageSize }),
+    myWishlist: async (_, { page, pageSize }, { token, req, clients, logger }) => {
+      const page_ = await clients.collections.getMyWishlist(token, req, { page, pageSize });
+      return hydrateCards(page_, clients.catalog, logger);
+    },
 
-    wishlist: async (_, { userId, page, pageSize }, { clients }) =>
-      clients.collections.getWishlist(userId, { page, pageSize }),
+    wishlist: async (_, { userId, page, pageSize }, { clients, logger }) => {
+      const page_ = await clients.collections.getWishlist(userId, { page, pageSize });
+      return hydrateCards(page_, clients.catalog, logger);
+    },
 
-    wishlistEntry: async (_, { cardId, variation }, { token, req, clients }) =>
-      clients.collections.getWishlistEntry(token, req, { cardId, variation }),
+    wishlistEntry: async (_, { cardId, variation }, { token, req, clients, logger }) => {
+      const entry = await clients.collections.getWishlistEntry(token, req, { cardId, variation });
+      return entry ? hydrateCards(entry, clients.catalog, logger) : null;
+    },
 
     // ── Binder ──────────────────────────────────────────────────────────────────
 
@@ -168,21 +228,13 @@ export const resolvers = {
 
     cardsearchSearchCards: async (_, { input }, { clients, logger }) => {
       try {
-        // Normalise field names: frontend sends `set`, catalog-service may expect `setCode`
-        const normalisedInput = {
+        return await clients.catalog.searchCards({
           ...input,
           setCode: input.setCode || input.set,
-        };
-        const result = await clients.catalog.searchCards(normalisedInput);
-        return {
-          total:  result?.total  ?? 0,
-          limit:  result?.limit  ?? input.limit  ?? 50,
-          offset: result?.offset ?? input.offset ?? 0,
-          items:  result?.items  ?? result?.cards ?? [],
-        };
+        });
       } catch (error) {
         logger.warn(`cardsearchSearchCards failed: ${error.message}`);
-        return { total: 0, limit: 50, offset: 0, items: [] };
+        return { total: 0, limit: input.limit ?? 50, offset: input.offset ?? 0, items: [] };
       }
     },
 
@@ -525,6 +577,26 @@ export const resolvers = {
       }
     },
 
+    myCapabilities: async (_, __, { token, clients, logger }) => {
+      const FREE_DEFAULTS = {
+        planName: 'Free', platformFeePercent: 8,
+        maxBinders: 3, maxCollectionCards: 500,
+        maxActiveListings: 5, maxActiveTrades: 3, features: [],
+      };
+      if (!token) return FREE_DEFAULTS;
+      try {
+        // Decode JWT payload to get userId without an extra auth round-trip
+        const [, payloadB64] = token.split('.');
+        const payload = JSON.parse(Buffer.from(payloadB64, 'base64url').toString());
+        const userId = payload.sub;
+        if (!userId) return FREE_DEFAULTS;
+        return await clients.payments.getMyCapabilities(userId);
+      } catch (error) {
+        logger.warn(`myCapabilities failed: ${error.message}`);
+        return FREE_DEFAULTS;
+      }
+    },
+
     subscriptionPortal: async (_, __, { token, clients, logger }) => {
       try {
         return await clients.payments.getSubscriptionPortal(token);
@@ -723,13 +795,27 @@ export const resolvers = {
       }
     },
 
+    exportUserData: async (_, _args, { token, clients, logger }) => {
+      try {
+        const data = await clients.users.exportUserData(token);
+        return typeof data === 'string' ? data : JSON.stringify(data);
+      } catch (error) {
+        logger.warn(`exportUserData failed: ${error.message}`);
+        throw error;
+      }
+    },
+
     // ── Collection ──────────────────────────────────────────────────────────────
 
-    addToCollection: async (_, args, { token, req, clients }) =>
-      clients.collections.addToCollection(token, req, args),
+    addToCollection: async (_, args, { token, req, clients, logger }) => {
+      const entry = await clients.collections.addToCollection(token, req, args);
+      return entry ? hydrateCards(entry, clients.catalog, logger) : entry;
+    },
 
-    updateCollectionEntry: async (_, args, { token, req, clients }) =>
-      clients.collections.updateCollection(token, req, args),
+    updateCollectionEntry: async (_, args, { token, req, clients, logger }) => {
+      const entry = await clients.collections.updateCollection(token, req, args);
+      return entry ? hydrateCards(entry, clients.catalog, logger) : entry;
+    },
 
     removeFromCollection: async (_, { cardId, variation }, { token, req, clients }) => {
       const result = await clients.collections.removeFromCollection(token, req, { cardId, variation });
@@ -741,8 +827,10 @@ export const resolvers = {
       return result?.ok ?? false;
     },
 
-    moveToCollection: async (_, { cardId, variation }, { token, req, clients }) =>
-      clients.collections.moveFromWishlist(token, req, { cardId, variation }),
+    moveToCollection: async (_, { cardId, variation }, { token, req, clients, logger }) => {
+      const entry = await clients.collections.moveFromWishlist(token, req, { cardId, variation });
+      return entry ? hydrateCards(entry, clients.catalog, logger) : entry;
+    },
 
     bulkAddToCollection: async (_, { cards }, { token, req, clients }) =>
       clients.collections.bulkAddToCollection(token, req, { cards }),
@@ -962,11 +1050,15 @@ export const resolvers = {
 
     // ── Wishlist ────────────────────────────────────────────────────────────────
 
-    addToWishlist: async (_, args, { token, req, clients }) =>
-      clients.collections.addToWishlist(token, req, args),
+    addToWishlist: async (_, args, { token, req, clients, logger }) => {
+      const entry = await clients.collections.addToWishlist(token, req, args);
+      return entry ? hydrateCards(entry, clients.catalog, logger) : entry;
+    },
 
-    updateWishlistEntry: async (_, args, { token, req, clients }) =>
-      clients.collections.updateWishlistEntry(token, req, args),
+    updateWishlistEntry: async (_, args, { token, req, clients, logger }) => {
+      const entry = await clients.collections.updateWishlistEntry(token, req, args);
+      return entry ? hydrateCards(entry, clients.catalog, logger) : entry;
+    },
 
     removeFromWishlist: async (_, { cardId, variation }, { token, req, clients }) => {
       const result = await clients.collections.removeFromWishlist(token, req, { cardId, variation });
@@ -974,6 +1066,15 @@ export const resolvers = {
     },
 
     // ── Binder ──────────────────────────────────────────────────────────────────
+
+    addBinderPage: async (_, { binderId, input }, { token, req, clients, logger }) => {
+      try {
+        return await clients.collections.addBinderPage(token, req, binderId, input);
+      } catch (error) {
+        logger.warn(`addBinderPage failed: ${error.message}`);
+        throw error;
+      }
+    },
 
     createBinder: async (_, { input }, { token, req, clients }) =>
       clients.collections.createBinder(token, req, input),
@@ -1442,11 +1543,10 @@ export const resolvers = {
     },
   },
 
-  // ── Union resolvers ───────────────────────────────────────────────────────────
+  // ── Interface resolvers ───────────────────────────────────────────────────────
 
-  Listing: {
+  ListingBase: {
     __resolveType(obj) {
-      // ProductListing has a title but no cardId; CardListing always has cardId
       if (obj.cardId) return 'CardListing';
       return 'ProductListing';
     },
@@ -1454,11 +1554,64 @@ export const resolvers = {
 
   // ── Field resolvers ───────────────────────────────────────────────────────────
 
+  CardListing: {
+    type:      () => 'CARD',
+    variation: (obj) => obj.variation ?? obj.variant ?? null,
+    seller:    async (obj, _, { clients, logger }) => {
+      if (!obj.sellerId) return null;
+      try {
+        const profile = await clients.users.getProfileById(obj.sellerId);
+        if (!profile) return null;
+        // getProfileById returns UserProfile shape; map to PublicUser
+        const u = profile.user ?? {};
+        return {
+          id:       u.id       ?? profile.userId ?? null,
+          username: u.username ?? null,
+          avatar:   profile.avatar ?? u.avatar ?? null,
+          bio:      profile.bio ?? null,
+          country:  profile.country ?? null,
+          createdAt: u.createdAt ?? null,
+        };
+      } catch (e) {
+        logger?.warn?.(`CardListing.seller failed for ${obj.sellerId}: ${e.message}`);
+        return null;
+      }
+    },
+  },
+
+  ProductListing: {
+    type:       () => 'PRODUCT',
+    allowOffers: (obj) => obj.allowOffers ?? null,
+  },
+
   Order: {
     // Alias fields the frontend expects
     orderNumber:        (obj) => obj.orderNumber ?? obj.id,
     total:              (obj) => obj.total ?? obj.totalAmount,
+    status:             (obj) => obj.paymentStatus ?? obj.status ?? null,
     paidAt:             (obj) => obj.paidAt ?? obj.capturedAt,
     shippingAddressJson:(obj) => obj.shippingAddressJson ?? obj.buyerAddressJson,
+  },
+
+  ChatThread: {
+    user: async (obj, _, { clients, logger }) => {
+      const id = obj.userId ?? obj.user?.id ?? null;
+      if (!id) return null;
+      // Return immediately if the messaging-service already hydrated user info
+      if (obj.user?.username) return obj.user;
+      try {
+        const profile = await clients.users.getProfileById(id);
+        if (!profile) return null;
+        const u = profile.user ?? {};
+        return {
+          id:       u.id       ?? profile.userId ?? id,
+          username: u.username ?? null,
+          avatar:   profile.avatar ?? u.avatar ?? null,
+        };
+      } catch (e) {
+        logger?.warn?.(`ChatThread.user failed for ${id}: ${e.message}`);
+        return null;
+      }
+    },
   },
 };

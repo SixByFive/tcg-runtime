@@ -1,178 +1,356 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="utf-8" />
   <title>Catalog Admin</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="color-scheme" content="light dark" />
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: system-ui, sans-serif; background: #0f1117; color: #e2e8f0; min-height: 100vh; }
-    header { background: #1a1d27; border-bottom: 1px solid #2d3748; padding: 1rem 2rem; display: flex; align-items: center; gap: 1rem; }
-    header h1 { font-size: 1.25rem; font-weight: 600; }
-    .tag { background: #3182ce; color: #fff; font-size: 0.7rem; padding: 0.15rem 0.5rem; border-radius: 9999px; }
-    .layout { display: grid; grid-template-columns: 220px 1fr; min-height: calc(100vh - 57px); }
-    nav { background: #141620; border-right: 1px solid #2d3748; padding: 1.5rem 0; }
-    nav a { display: block; padding: 0.6rem 1.5rem; color: #a0aec0; text-decoration: none; font-size: 0.9rem; transition: background 0.15s; }
-    nav a:hover, nav a.active { background: #1e2235; color: #63b3ed; }
-    main { padding: 2rem; overflow-y: auto; }
-    section { display: none; }
-    section.active { display: block; }
-    h2 { font-size: 1.1rem; font-weight: 600; margin-bottom: 1rem; color: #90cdf4; }
-    .card { background: #1a1d27; border: 1px solid #2d3748; border-radius: 8px; padding: 1.5rem; margin-bottom: 1.5rem; }
-    label { display: block; font-size: 0.8rem; color: #a0aec0; margin-bottom: 0.3rem; margin-top: 0.75rem; }
-    input, select { width: 100%; background: #0f1117; border: 1px solid #4a5568; color: #e2e8f0; padding: 0.5rem 0.75rem; border-radius: 6px; font-size: 0.9rem; }
-    input:focus, select:focus { outline: none; border-color: #63b3ed; }
-    .row { display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: flex-end; }
-    .row .field { flex: 1; min-width: 160px; }
-    button { background: #3182ce; color: #fff; border: none; padding: 0.5rem 1.25rem; border-radius: 6px; cursor: pointer; font-size: 0.875rem; transition: background 0.15s; margin-top: 0.25rem; }
-    button:hover { background: #2b6cb0; }
-    button.danger { background: #e53e3e; }
-    button.danger:hover { background: #c53030; }
-    button.secondary { background: #4a5568; }
-    button.secondary:hover { background: #2d3748; }
-    button.success { background: #38a169; }
-    button.success:hover { background: #276749; }
-    pre { background: #0a0c14; border: 1px solid #2d3748; border-radius: 6px; padding: 1rem; font-size: 0.8rem; overflow-x: auto; max-height: 400px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; }
-    .status-badge { display: inline-block; font-size: 0.7rem; padding: 0.15rem 0.5rem; border-radius: 9999px; }
-    .status-idle { background: #276749; color: #9ae6b4; }
-    .status-running { background: #2a4365; color: #90cdf4; }
-    .status-error { background: #742a2a; color: #fc8181; }
-    .status-paused { background: #44337a; color: #d6bcfa; }
-    table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
-    th { text-align: left; padding: 0.5rem 0.75rem; color: #a0aec0; border-bottom: 1px solid #2d3748; }
-    td { padding: 0.5rem 0.75rem; border-bottom: 1px solid #1a1d27; vertical-align: top; word-break: break-all; }
-    tr:hover td { background: #1a1d27; }
-    .actions { display: flex; gap: 0.4rem; flex-wrap: wrap; }
-    .toast { position: fixed; bottom: 1.5rem; right: 1.5rem; background: #276749; color: #f0fff4; padding: 0.75rem 1.25rem; border-radius: 8px; font-size: 0.875rem; z-index: 100; display: none; }
-    .toast.error { background: #742a2a; color: #fff5f5; }
-    #admin-key-bar { background: #1a1d27; border-bottom: 1px solid #2d3748; padding: 0.5rem 2rem; display: flex; align-items: center; gap: 0.75rem; font-size: 0.85rem; }
-    #admin-key-bar input { max-width: 280px; }
+    :root {
+      color-scheme: light dark;
+      --bg:#f4f6fb; --bg-alt:#eef1f8; --surface:#ffffff; --surface-muted:#f9fbff;
+      --border:#d6deed; --border-strong:#c3cde2; --text:#17223a; --muted:#53627f;
+      --muted-strong:#364360; --accent:#2563eb; --accent-soft:rgba(37,99,235,0.12);
+      --ok:#15803d; --warn:#d97706; --err:#dc2626;
+      --shadow:0 28px 60px -40px rgba(15,25,40,0.45);
+      --radius-lg:18px; --radius:12px; --radius-sm:8px;
+    }
+    @media (prefers-color-scheme:dark){:root{
+      --bg:#081019; --bg-alt:#0d1827; --surface:#111d30; --surface-muted:#172942;
+      --border:#1f3554; --border-strong:#2f476d; --text:#e6ecf9; --muted:#8fa2c1;
+      --muted-strong:#bdcbe3; --accent:#7bb6ff; --accent-soft:rgba(123,182,255,0.12);
+      --ok:#2dd17c; --warn:#f4b76b; --err:#ff7c7c;
+      --shadow:0 28px 60px -46px rgba(0,0,0,0.8);
+    }}
+    *{box-sizing:border-box;} html,body{min-height:100%;}
+    body{margin:0;background:var(--bg);color:var(--text);font:14px/1.6 "Inter","Segoe UI",Roboto,Arial,sans-serif;-webkit-font-smoothing:antialiased;}
+    a{color:var(--accent);} h1,h2,h3{margin:0;}
+    h1{font-size:28px;line-height:1.2;font-weight:700;}
+    h2{font-size:18px;line-height:1.3;font-weight:600;}
+    h3{font-size:15px;line-height:1.3;font-weight:600;}
+    p{margin:0;} ul{margin:8px 0 0 18px;padding:0;} li{margin:0 0 4px;}
+    .page{min-height:100vh;display:flex;flex-direction:column;}
+    .wrap{width:100%;max-width:1240px;margin:0 auto;padding:0 24px;}
+    .page__header{background:linear-gradient(135deg,#111a2f 0%,#1a2844 50%,#203756 100%);color:#f8fafc;padding:44px 0 36px;box-shadow:var(--shadow);}
+    .header-wrap{display:flex;flex-wrap:wrap;gap:40px;align-items:flex-start;justify-content:space-between;}
+    .header-intro{flex:1 1 420px;display:flex;flex-direction:column;gap:16px;}
+    .eyebrow{display:inline-flex;align-items:center;gap:8px;padding:4px 10px;border-radius:999px;background:rgba(255,255,255,0.16);font-size:12px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;}
+    .header-intro p{max-width:560px;color:rgba(248,250,252,0.86);}
+    .header-actions{display:flex;flex-wrap:wrap;gap:12px;align-items:center;}
+    .page__main{flex:1;padding:52px 0 72px;background:var(--bg);}
+    .stack{display:flex;flex-direction:column;gap:28px;}
+    .panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:24px;box-shadow:0 18px 42px -40px rgba(15,25,40,0.5);}
+    .panel__title{display:flex;flex-direction:column;gap:6px;margin-bottom:20px;}
+    .panel__title span{color:var(--muted);font-size:13px;}
+    .panel__title h2{display:flex;align-items:center;gap:12px;}
+    .panel__toolbar{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;margin-bottom:18px;}
+    .panel__toolbar .muted{max-width:640px;}
+    .kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:18px;}
+    .kpi-card{background:var(--surface-muted);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px;display:flex;flex-direction:column;gap:8px;}
+    .kpi-label{font-size:12px;text-transform:uppercase;letter-spacing:0.04em;color:var(--muted);font-weight:600;}
+    .kpi-value{font-size:26px;font-weight:700;color:var(--text);}
+    .kpi-value--small{font-size:16px;font-weight:600;color:var(--muted-strong);}
+    .kpi-hint{font-size:12px;color:var(--muted);}
+    .layout-grid{display:grid;gap:28px;grid-template-columns:minmax(0,2fr) minmax(0,1fr);align-items:start;}
+    .job-card{background:var(--surface-muted);border:1px solid var(--border);border-radius:var(--radius);padding:20px;display:flex;flex-direction:column;gap:18px;margin-bottom:18px;}
+    .job-card:last-of-type{margin-bottom:0;}
+    .job-card header{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start;justify-content:space-between;}
+    .job-card header p{font-size:13px;color:var(--muted);max-width:420px;margin-top:4px;}
+    .job-card__body{display:flex;flex-direction:column;gap:16px;}
+    .form-grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));}
+    .field{display:flex;flex-direction:column;gap:6px;}
+    .field label{font-size:12px;letter-spacing:0.02em;text-transform:uppercase;color:var(--muted);font-weight:600;}
+    .field.checkbox-field{flex-direction:row;align-items:center;gap:10px;}
+    .field.checkbox-field label{margin:0;font-size:13px;letter-spacing:0;text-transform:none;color:var(--text);display:flex;align-items:center;gap:8px;}
+    .field.checkbox-field input[type="checkbox"]{width:auto;height:auto;accent-color:var(--accent);}
+    input,select,textarea{font:14px/1.5 inherit;color:var(--text);background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;outline:none;transition:border .15s,box-shadow .15s;width:100%;}
+    input:focus,select:focus,textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft);}
+    input::placeholder,textarea::placeholder{color:rgba(82,99,124,0.6);}
+    button{font:600 14px/1.2 inherit;letter-spacing:0.01em;display:inline-flex;align-items:center;justify-content:center;gap:8px;border-radius:12px;padding:11px 18px;border:1px solid transparent;background:var(--surface-muted);color:var(--text);cursor:pointer;transition:transform .15s,box-shadow .2s,filter .2s;white-space:nowrap;}
+    button:hover{transform:translateY(-1px);box-shadow:0 10px 24px -18px rgba(15,23,42,0.6);}
+    button:active{transform:translateY(0);}
+    button:disabled{opacity:0.5;cursor:not-allowed;transform:none;}
+    .btn-primary,.btn-accent,.btn-ok,.btn-warn,.btn-err{color:#fff;}
+    .btn-primary{background:linear-gradient(135deg,var(--accent),#1d4ed8);}
+    .btn-muted{background:var(--surface);border-color:var(--border);color:var(--muted);}
+    .btn-ghost{background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.25);color:#f1f5f9;}
+    .btn-ghost:hover{filter:brightness(1.08);}
+    .btn-accent{background:linear-gradient(135deg,var(--accent),#1d4ed8);}
+    .btn-ok{background:linear-gradient(135deg,var(--ok),#0f7a33);}
+    .btn-warn{background:linear-gradient(135deg,var(--warn),#b45309);}
+    .btn-err{background:linear-gradient(135deg,var(--err),#b91c1c);}
+    .btn-outline{background:transparent;border:1px solid var(--border);color:var(--text);}
+    .btn-sm{padding:7px 12px;font-size:12px;border-radius:8px;}
+    .key-panel{flex:0 1 320px;background:rgba(15,25,45,0.25);border-radius:var(--radius);padding:22px;backdrop-filter:blur(12px);display:flex;flex-direction:column;gap:16px;box-shadow:inset 0 0 0 1px rgba(255,255,255,0.16);}
+    .key-panel h2{font-size:16px;font-weight:600;}
+    .key-panel p{font-size:13px;color:rgba(248,250,252,0.85);}
+    .key-panel input{background:rgba(15,23,42,0.45);border:1px solid rgba(255,255,255,0.32);color:#fff;}
+    .key-panel input::placeholder{color:rgba(248,250,252,0.65);}
+    .key-panel .key-panel__buttons{display:flex;gap:10px;flex-wrap:wrap;}
+    .key-panel .btn-muted{color:#fff;border-color:rgba(255,255,255,0.4);background:rgba(255,255,255,0.12);}
+    .key-pill{display:flex;align-items:center;gap:10px;background:rgba(15,23,42,0.25);border-radius:999px;padding:6px 14px;font-size:12px;color:#f8fafc;}
+    .key-pill .label{font-weight:600;text-transform:uppercase;letter-spacing:0.04em;}
+    .key-ind{font-size:12px;font-weight:600;padding:4px 10px;border-radius:999px;border:1px solid rgba(255,255,255,0.35);background:rgba(15,23,42,0.25);}
+    .key-ind.ok{background:rgba(16,185,129,0.22);border-color:rgba(16,185,129,0.45);color:#ecfdf6;}
+    .key-ind.err{background:rgba(220,38,38,0.18);border-color:rgba(248,113,113,0.55);color:#fee2e2;}
+    .muted{color:var(--muted);} .small{font-size:12px;}
+    .card-list{display:grid;gap:18px;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));margin-top:18px;}
+    .empty{padding:26px;border:1px dashed var(--border);border-radius:var(--radius);text-align:center;color:var(--muted);background:var(--surface-muted);font-size:13px;}
+    .chip{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:4px 10px;border-radius:999px;background:var(--surface);border:1px solid var(--border);color:var(--muted);}
+    .chip.ok{color:var(--ok);border-color:rgba(21,128,61,0.35);background:rgba(21,128,61,0.08);}
+    .chip.warn{color:var(--warn);border-color:rgba(217,119,6,0.35);background:rgba(217,119,6,0.1);}
+    .chip.err{color:var(--err);border-color:rgba(220,38,38,0.35);background:rgba(220,38,38,0.1);}
+    .chip.busy{color:var(--accent);border-color:rgba(37,99,235,0.35);background:var(--accent-soft);}
+    .lbl{font-size:11px;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);font-weight:600;display:block;margin-bottom:4px;}
+    .task-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;display:flex;flex-direction:column;gap:12px;box-shadow:0 12px 30px -32px rgba(15,25,40,0.45);}
+    .task-card__header{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;}
+    .task-card__title{display:flex;flex-direction:column;gap:4px;}
+    .task-card__facts{display:flex;flex-wrap:wrap;gap:12px;margin:0;padding:0;list-style:none;font-size:12px;}
+    .task-card__facts li{flex:1 1 120px;min-width:120px;display:flex;flex-direction:column;gap:2px;}
+    .task-card__facts li span:last-child{color:var(--text);font-size:13px;}
+    .task-card__actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px;}
+    .set-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;display:flex;flex-direction:column;gap:10px;}
+    .set-card__header{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;}
+    .set-card__body{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;font-size:13px;}
+    .set-card__actions{display:flex;justify-content:flex-end;gap:8px;}
+    .output-box{background:var(--bg-alt);border:1px dashed var(--border);border-radius:var(--radius-sm);padding:14px;font-size:12px;line-height:1.5;color:var(--muted-strong);max-height:260px;overflow:auto;white-space:pre-wrap;word-break:break-word;margin-top:14px;display:none;font-family:ui-monospace,monospace;}
+    .search-bar{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;}
+    .search-bar .field{flex:1 1 240px;}
+    .section-foot{font-size:12px;color:var(--muted);margin-top:10px;}
+    .monospace{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;}
+    table{width:100%;border-collapse:separate;border-spacing:0;font-size:13px;}
+    thead th{position:sticky;top:0;background:var(--surface);border-bottom:1px solid var(--border-strong);padding:10px 12px;text-align:left;font-weight:600;color:var(--muted-strong);}
+    tbody td{border-bottom:1px solid var(--border);padding:10px 12px;color:var(--text);}
+    tbody tr:last-child td{border-bottom:none;}
+    tbody tr:hover{background:var(--surface-muted);}
+    .table-wrap{max-height:340px;overflow:auto;margin-top:16px;border-radius:var(--radius);border:1px solid var(--border);}
+    .table-wrap table{background:var(--surface);}
+    .toast{position:fixed;right:20px;bottom:20px;display:flex;flex-direction:column;gap:12px;z-index:9999;align-items:flex-end;}
+    .toast .t{background:var(--surface);border:1px solid var(--border-strong);border-radius:var(--radius);padding:12px 16px;min-width:220px;max-width:360px;color:var(--text);box-shadow:0 16px 42px -32px rgba(15,25,40,0.65);animation:slideIn .2s ease;}
+    .toast .t.ok{border-color:rgba(21,128,61,0.5);color:var(--ok);}
+    .toast .t.err{border-color:rgba(220,38,38,0.5);color:var(--err);}
+    .toast .t.warn{border-color:rgba(217,119,6,0.5);color:var(--warn);}
+    @keyframes slideIn{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
+    @media(max-width:980px){.layout-grid{grid-template-columns:1fr;}.page__main{padding:40px 0 60px;}.header-wrap{gap:24px;}.key-panel{flex:1 1 100%;}}
+    @media(max-width:600px){.wrap{padding:0 16px;}.header-actions{flex-direction:column;align-items:flex-start;}}
   </style>
 </head>
 <body>
-<header>
-  <h1>Catalog Admin</h1>
-  <span class="tag">SixByFive</span>
-</header>
-
-<div id="admin-key-bar">
-  <label style="margin:0; color:#a0aec0;">Admin Key:</label>
-  <input type="password" id="admin-key" placeholder="Enter ADMIN_API_KEY" style="max-width:280px;" />
-</div>
-
-<div class="layout">
-  <nav>
-    <a href="#" class="active" data-section="jobs">Ad-hoc Jobs</a>
-    <a href="#" data-section="scheduler">Scheduler</a>
-    <a href="#" data-section="add-task">Add Cron Task</a>
-  </nav>
-
-  <main>
-    <section id="jobs" class="active">
-      <h2>Ad-hoc Jobs</h2>
-
-      <div class="card">
-        <strong>Ingest Set</strong>
-        <p style="font-size:0.8rem; color:#a0aec0; margin-top:0.5rem;">Fetch set + cards from TCGdex and upsert into DB.</p>
-        <label>Set input (tcgdex code, abbreviation, or ptcg code)</label>
-        <div class="row">
-          <div class="field"><input id="ingest-input" placeholder="e.g. sv08 or SSP or sv8" /></div>
-          <label style="display:flex;align-items:center;gap:0.4rem;"><input type="checkbox" id="ingest-refresh"> Refresh</label>
-          <label style="display:flex;align-items:center;gap:0.4rem;"><input type="checkbox" id="ingest-dry"> Dry run</label>
-          <button onclick="runIngest()">Run Ingest</button>
-        </div>
-      </div>
-
-      <div class="card">
-        <strong>Collect Prices</strong>
-        <p style="font-size:0.8rem; color:#a0aec0; margin-top:0.5rem;">Collect latest prices from providers and upsert observations.</p>
-        <div class="row">
-          <div class="field"><label>Set</label><input id="collect-set" placeholder="sv08 or SSP" /></div>
-          <div class="field"><label>Since (optional)</label><input id="collect-since" type="date" /></div>
-          <label style="display:flex;align-items:center;gap:0.4rem;margin-top:1.5rem;"><input type="checkbox" id="collect-dry"> Dry run</label>
-          <button onclick="runCollect()" style="margin-top:1.5rem;">Run Collect</button>
-        </div>
-      </div>
-
-      <div class="card">
-        <strong>FX Daily</strong>
-        <p style="font-size:0.8rem; color:#a0aec0; margin-top:0.5rem;">Pre-warm ECB FX cache.</p>
-        <div class="row">
-          <div class="field"><label>Backfill days (blank = 90d prewarm)</label><input id="fx-days" type="number" placeholder="e.g. 7" /></div>
-          <button onclick="runFxDaily()" style="margin-top:1.5rem;">Run FX Daily</button>
-        </div>
-      </div>
-
-      <div class="card">
-        <strong>Rebuild Rollups</strong>
-        <p style="font-size:0.8rem; color:#a0aec0; margin-top:0.5rem;">Recompute 1/7/30/90 day aggregates from price observations.</p>
-        <div class="row">
-          <div class="field">
-            <label>Scope</label>
-            <select id="rollup-scope">
-              <option value="all">All</option>
-              <option value="set">Set</option>
-              <option value="card">Card</option>
-            </select>
-          </div>
-          <div class="field"><label>Set / Card ID (if scoped)</label><input id="rollup-target" placeholder="sv08 or sv08-001" /></div>
-          <button onclick="runRollups()" style="margin-top:1.5rem;">Run Rollups</button>
-        </div>
-      </div>
-
-      <div class="card">
-        <strong>Ensure Set Tasks</strong>
-        <p style="font-size:0.8rem; color:#a0aec0; margin-top:0.5rem;">Create default cron tasks (ingest/collect/rollup) for a set if not already scheduled.</p>
-        <div class="row">
-          <div class="field"><input id="ensure-set" placeholder="sv08" /></div>
-          <button onclick="runEnsureTasks()">Ensure Tasks</button>
-        </div>
-      </div>
-
-      <div id="job-output" style="display:none;" class="card">
-        <strong>Output</strong>
-        <pre id="job-result"></pre>
-      </div>
-    </section>
-
-    <section id="scheduler">
-      <h2>Scheduled Tasks <button class="secondary" onclick="loadScheduler()" style="margin-left:0.5rem;font-size:0.75rem;padding:0.3rem 0.75rem;">Refresh</button></h2>
-      <div id="scheduler-table-wrap">
-        <p style="color:#718096; font-size:0.875rem;">Loading...</p>
-      </div>
-    </section>
-
-    <section id="add-task">
-      <h2>Add Cron Task</h2>
-      <div class="card">
-        <div class="row">
-          <div class="field"><label>Cron Expression</label><input id="new-cron-exp" placeholder="15 * * * *" /></div>
-          <div class="field">
-            <label>Job Name</label>
-            <select id="new-job-name">
-              <option value="ingestSet">ingestSet</option>
-              <option value="collectPrices">collectPrices</option>
-              <option value="fxDaily">fxDaily</option>
-              <option value="priceRollups">priceRollups</option>
-            </select>
+<div class="page">
+  <header class="page__header">
+    <div class="wrap header-wrap">
+      <div class="header-intro">
+        <span class="eyebrow">SixByFive TCG</span>
+        <h1>Catalog Admin</h1>
+        <p>Monitor and trigger ingestion, pricing, and scheduler pipelines from a single control centre.</p>
+        <div class="header-actions">
+          <button id="refreshAll" type="button" class="btn-ghost">Refresh everything</button>
+          <div class="key-pill">
+            <span class="label">Key</span>
+            <span id="keyStatus" class="key-ind">-</span>
           </div>
         </div>
-        <label>Payload (JSON)</label>
-        <input id="new-payload" placeholder='{"set":"sv08"}' />
-        <label>Description</label>
-        <input id="new-desc" placeholder="Optional description" />
-        <label>Timezone</label>
-        <input id="new-tz" placeholder="e.g. Europe/London (leave blank for UTC)" />
-        <br>
-        <button onclick="addCronTask()" class="success" style="margin-top:1rem;">Add Task</button>
-        <pre id="add-task-result" style="display:none;margin-top:1rem;"></pre>
       </div>
-    </section>
+      <div class="key-panel">
+        <h2>Admin key</h2>
+        <p>Stored in <span class="monospace">sessionStorage</span> and sent as <span class="monospace">x-admin-key</span> with every request.</p>
+        <label class="visually-hidden" for="adminKey">Admin key</label>
+        <input id="adminKey" type="password" placeholder="Paste ADMIN_API_KEY here" autocomplete="off" />
+        <div class="key-panel__buttons">
+          <button id="saveKey" type="button" class="btn-primary">Save key</button>
+          <button id="clearKey" type="button" class="btn-muted">Clear</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="page__main">
+    <div class="wrap stack">
+
+      <!-- KPIs -->
+      <section class="panel">
+        <div class="panel__title">
+          <h2>At a glance</h2>
+          <span>Metrics update on page load and after each job runs.</span>
+        </div>
+        <div class="kpi-grid">
+          <article class="kpi-card">
+            <span class="kpi-label">Scheduled tasks</span>
+            <span class="kpi-value" id="kpiTasks">-</span>
+            <span class="kpi-hint">Registered and ready</span>
+          </article>
+          <article class="kpi-card">
+            <span class="kpi-label">Sets in catalog</span>
+            <span class="kpi-value" id="kpiSets">-</span>
+            <span class="kpi-hint">Ingested and searchable</span>
+          </article>
+          <article class="kpi-card">
+            <span class="kpi-label">Latest action</span>
+            <span class="kpi-value kpi-value--small" id="kpiLast">Awaiting activity</span>
+            <span class="kpi-hint">Updates after each job</span>
+          </article>
+        </div>
+      </section>
+
+      <!-- Scheduler -->
+      <section class="panel">
+        <div class="panel__title">
+          <h2>Scheduler</h2>
+          <span>View recurring jobs and trigger runs without touching the CLI.</span>
+        </div>
+        <div class="panel__toolbar">
+          <span class="muted small">Use <strong>Run now</strong> to trigger a job immediately. Pause/resume toggles automatic execution.</span>
+          <button id="refreshTasks" type="button" class="btn-outline">Refresh</button>
+        </div>
+        <div id="tasksList" class="card-list">
+          <div class="empty">Loading tasks…</div>
+        </div>
+
+        <!-- Add task -->
+        <details style="margin-top:20px;">
+          <summary style="cursor:pointer;font-weight:600;color:var(--muted-strong);font-size:13px;padding:8px 0;">+ Add cron task</summary>
+          <div style="margin-top:14px;" class="form-grid">
+            <div class="field"><label for="newCron">Cron expression</label><input id="newCron" placeholder="0 3 * * *" /></div>
+            <div class="field">
+              <label for="newJobName">Job name</label>
+              <select id="newJobName">
+                <option value="ingestSet">ingestSet</option>
+                <option value="collectPrices">collectPrices</option>
+                <option value="fxDaily">fxDaily</option>
+                <option value="priceRollups">priceRollups</option>
+              </select>
+            </div>
+            <div class="field"><label for="newPayload">Payload (JSON)</label><input id="newPayload" placeholder='{"set":"sv08"}' /></div>
+            <div class="field"><label for="newDesc">Description</label><input id="newDesc" placeholder="Optional" /></div>
+            <div class="field"><label for="newTz">Timezone</label><input id="newTz" placeholder="Europe/London (blank = UTC)" /></div>
+          </div>
+          <button id="addTask" type="button" class="btn-ok" style="margin-top:14px;">Add task</button>
+          <div id="addTaskOutput" class="output-box"></div>
+        </details>
+      </section>
+
+      <div class="layout-grid">
+        <!-- Jobs -->
+        <section class="panel">
+          <div class="panel__title">
+            <h2>One-off jobs</h2>
+            <span>Run targeted operations without touching the CLI.</span>
+          </div>
+
+          <article class="job-card">
+            <header>
+              <div><h3>Ingest set</h3><p>Fetch set + cards from TCGdex and upsert into the catalog DB.</p></div>
+              <button id="btnIngest" type="button" class="btn-accent">Run ingest</button>
+            </header>
+            <div class="job-card__body">
+              <div class="form-grid">
+                <div class="field"><label for="ingestInput">Set identifier</label><input id="ingestInput" placeholder="sv08 / SSP / Surging Sparks" /></div>
+                <div class="field"><label for="ingestRefresh">Fetch mode</label>
+                  <select id="ingestRefresh"><option value="false">Use cache</option><option value="true">Force live fetch</option></select></div>
+                <div class="field"><label for="ingestDry">Dry run</label>
+                  <select id="ingestDry"><option value="false">No</option><option value="true">Yes</option></select></div>
+              </div>
+            </div>
+            <div id="ingestOutput" class="output-box"></div>
+          </article>
+
+          <article class="job-card">
+            <header>
+              <div><h3>Collect prices</h3><p>Pull provider pricing for a set and write observations with GBP FX conversion.</p></div>
+              <button id="btnCollect" type="button" class="btn-ok">Run collect</button>
+            </header>
+            <div class="job-card__body">
+              <div class="form-grid">
+                <div class="field"><label for="collectSet">Set identifier</label><input id="collectSet" placeholder="sv08 / SSP" /></div>
+                <div class="field"><label for="collectSince">Since (YYYY-MM-DD)</label><input id="collectSince" type="date" /></div>
+                <div class="field"><label for="collectDry">Dry run</label>
+                  <select id="collectDry"><option value="false">No</option><option value="true">Yes</option></select></div>
+              </div>
+            </div>
+            <div id="collectOutput" class="output-box"></div>
+          </article>
+
+          <article class="job-card">
+            <header>
+              <div><h3>FX daily</h3><p>Pre-warm the ECB exchange rate cache and optionally backfill missing days.</p></div>
+              <button id="btnFx" type="button" class="btn-primary">Run FX daily</button>
+            </header>
+            <div class="job-card__body">
+              <div class="form-grid">
+                <div class="field"><label for="fxDays">Backfill days (blank = 90d prewarm)</label><input id="fxDays" type="number" min="0" max="365" placeholder="0" /></div>
+              </div>
+            </div>
+            <div id="fxOutput" class="output-box"></div>
+          </article>
+
+          <article class="job-card">
+            <header>
+              <div><h3>Rebuild rollups</h3><p>Recompute 1/7/30/90 day price aggregates from observations.</p></div>
+              <button id="btnRollups" type="button" class="btn-accent">Rebuild</button>
+            </header>
+            <div class="job-card__body">
+              <div class="form-grid">
+                <div class="field"><label for="rollupScope">Scope</label>
+                  <select id="rollupScope"><option value="">Global</option><option value="set">By set</option><option value="card">By card</option></select></div>
+                <div class="field"><label for="rollupTarget">Target</label><input id="rollupTarget" placeholder="sv08 or sv08-001" /></div>
+                <div class="field"><label for="rollupVariant">Variant</label><input id="rollupVariant" placeholder="normal" /></div>
+              </div>
+            </div>
+            <div id="rollupsOutput" class="output-box"></div>
+          </article>
+        </section>
+
+        <!-- FX rates -->
+        <section class="panel">
+          <div class="panel__title">
+            <h2>FX rates (ECB)</h2>
+            <span id="fxMeta" class="muted small">EUR base — load to view current rates</span>
+          </div>
+          <div class="search-bar" style="margin-bottom:12px;">
+            <div class="field"><label for="fxDate">Date (blank = latest)</label><input id="fxDate" type="date" /></div>
+            <button id="fxFetch" type="button" class="btn-accent" style="margin-bottom:0;align-self:flex-end;">Load rates</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Currency</th><th>Rate vs EUR</th></tr></thead>
+              <tbody id="fxRatesTbody"><tr><td colspan="2" class="muted">No rates loaded.</td></tr></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+
+      <!-- Sets -->
+      <section class="panel">
+        <div class="panel__title">
+          <h2>Sets</h2>
+          <span>Search the catalog and trigger per-set operations.</span>
+        </div>
+        <div class="search-bar">
+          <div class="field"><label for="setsQuery">Search</label><input id="setsQuery" placeholder="Name, code, or abbreviation" /></div>
+          <button id="searchSets" type="button" class="btn-accent" style="align-self:flex-end;">Search</button>
+        </div>
+        <div id="setsList" class="card-list" style="margin-top:18px;">
+          <div class="empty">Run a search to list sets.</div>
+        </div>
+        <p class="section-foot" id="setsFoot"></p>
+      </section>
+
+      <!-- Tips -->
+      <section class="panel">
+        <div class="panel__title"><h2>Tips</h2></div>
+        <ul class="muted small">
+          <li>Use codes like <span class="monospace">sv08</span>, abbreviations like <span class="monospace">SSP</span>, or partial names like <span class="monospace">Surging</span> to find sets.</li>
+          <li><strong>Ingest</strong> pulls set metadata and cards from TCGdex. Run this first for new sets.</li>
+          <li><strong>Rollups</strong> rebuild the 1/7/30/90-day aggregates — run after collecting prices.</li>
+          <li>The admin key is stored in <span class="monospace">sessionStorage</span> only — it clears when you close the tab.</li>
+        </ul>
+      </section>
+
+    </div>
   </main>
 </div>
 
-<div class="toast" id="toast"></div>
-
+<div class="toast" id="toast" aria-live="polite"></div>
 <script src="admin.js"></script>
 </body>
 </html>

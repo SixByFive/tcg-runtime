@@ -42,7 +42,13 @@ router.get('/admin', requireAdmin, async (_req, res) => {
  * Body: { name, description?, price, interval?, feeDiscount?, featuresJson?, sortOrder? }
  */
 router.post('/admin', requireAdmin, async (req, res) => {
-  const { name, description, price, interval = 'month', feeDiscount = 0, featuresJson, sortOrder = 0 } = req.body;
+  const {
+    name, description, price, interval = 'month',
+    feeDiscount = 0, platformFeePercent = 8,
+    maxBinders = null, maxCollectionCards = null,
+    maxActiveListings = null, maxActiveTrades = null,
+    featuresJson, sortOrder = 0,
+  } = req.body;
   if (!name || !price) return res.status(400).json({ error: 'name and price are required' });
 
   try {
@@ -59,7 +65,9 @@ router.post('/admin', requireAdmin, async (req, res) => {
       name, description, price, currency: 'GBP', interval,
       stripeProductId: product.id,
       stripePriceId:   stripePrice.id,
-      feeDiscount, featuresJson: featuresJson || null, sortOrder,
+      feeDiscount, platformFeePercent,
+      maxBinders, maxCollectionCards, maxActiveListings, maxActiveTrades,
+      featuresJson: featuresJson || null, sortOrder,
     });
 
     res.status(201).json(plan);
@@ -77,15 +85,24 @@ router.patch('/admin/:id', requireAdmin, async (req, res) => {
     const plan = await SubscriptionPlan.findByPk(req.params.id);
     if (!plan) return res.status(404).json({ error: 'Plan not found' });
 
-    const { name, description, feeDiscount, featuresJson, sortOrder, active, price, interval } = req.body;
+    const {
+      name, description, feeDiscount, platformFeePercent,
+      maxBinders, maxCollectionCards, maxActiveListings, maxActiveTrades,
+      featuresJson, sortOrder, active, price, interval,
+    } = req.body;
     const updates = {};
 
-    if (name        !== undefined) updates.name        = name;
-    if (description !== undefined) updates.description = description;
-    if (feeDiscount !== undefined) updates.feeDiscount = feeDiscount;
-    if (featuresJson !== undefined) updates.featuresJson = featuresJson;
-    if (sortOrder   !== undefined) updates.sortOrder   = sortOrder;
-    if (active      !== undefined) updates.active      = active;
+    if (name               !== undefined) updates.name               = name;
+    if (description        !== undefined) updates.description        = description;
+    if (feeDiscount        !== undefined) updates.feeDiscount        = feeDiscount;
+    if (platformFeePercent !== undefined) updates.platformFeePercent = platformFeePercent;
+    if (maxBinders         !== undefined) updates.maxBinders         = maxBinders;
+    if (maxCollectionCards !== undefined) updates.maxCollectionCards = maxCollectionCards;
+    if (maxActiveListings  !== undefined) updates.maxActiveListings  = maxActiveListings;
+    if (maxActiveTrades    !== undefined) updates.maxActiveTrades    = maxActiveTrades;
+    if (featuresJson       !== undefined) updates.featuresJson       = featuresJson;
+    if (sortOrder          !== undefined) updates.sortOrder          = sortOrder;
+    if (active             !== undefined) updates.active             = active;
 
     // Price change → create new Stripe Price, archive old
     if (price !== undefined || interval !== undefined) {
