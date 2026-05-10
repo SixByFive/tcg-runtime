@@ -319,14 +319,17 @@ export type CartOrderResult = {
 
 export type CatalogCard = {
   id?: Maybe<Scalars['ID']['output']>;
-  image_large?: Maybe<Scalars['String']['output']>;
-  image_small?: Maybe<Scalars['String']['output']>;
+  cardId?: Maybe<Scalars['String']['output']>;
   name?: Maybe<Scalars['String']['output']>;
   number?: Maybe<Scalars['String']['output']>;
+  setCode?: Maybe<Scalars['String']['output']>;
   rarity?: Maybe<Scalars['String']['output']>;
-  set_code?: Maybe<Scalars['String']['output']>;
-  subtype?: Maybe<Scalars['String']['output']>;
   supertype?: Maybe<Scalars['String']['output']>;
+  subtype?: Maybe<Scalars['String']['output']>;
+  images?: Maybe<CardImage>;
+  set?: Maybe<CardSetRef>;
+  variants?: Maybe<Array<Maybe<CardVariant>>>;
+  latestPrices?: Maybe<Array<Maybe<CardPrice>>>;
 };
 
 export type ChatBlock = {

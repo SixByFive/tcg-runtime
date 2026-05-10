@@ -4,7 +4,7 @@ import type { WishlistEntry, WishlistPage, WishlistStatus } from '@sixbyfive/api
 
 const ENTRY_FIELDS = `
   id userId cardId quantity variation notes status addedAt createdAt updatedAt
-  card { id name number set_code rarity image_small image_large }
+  card { id cardId name number setCode rarity images { small large } set { code name } variants { key default label } }
 `;
 
 export interface MyWishlistQueryVariables { page?: number | null; pageSize?: number | null }

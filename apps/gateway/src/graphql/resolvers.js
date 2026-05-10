@@ -682,8 +682,8 @@ export const resolvers = {
           items:  result?.items  ?? result?.cards ?? [],
         };
       } catch (error) {
-        logger.warn(`searchCards failed: ${error.message}`);
-        return { total: 0, limit: 50, offset: 0, items: [] };
+        logger.error(`searchCards failed: ${error.message}`);
+        throw new Error(`Card search unavailable: ${error.message}`);
       }
     },
 

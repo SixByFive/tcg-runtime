@@ -4,7 +4,7 @@ import type { CollectionEntry, BulkAddResult, BulkAddCardInput } from '@sixbyfiv
 
 const ENTRY_FIELDS = `
   id userId cardId quantity condition variation wishlist createdAt updatedAt
-  card { id name number set_code rarity image_small image_large supertype subtype }
+  card { id cardId name number setCode rarity supertype subtype images { small large } set { code name } variants { key default label } }
 `;
 
 export interface MyCollectionQuery { myCollection: CollectionEntry[] }

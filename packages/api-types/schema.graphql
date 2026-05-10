@@ -428,14 +428,17 @@ type PriceRollup {
 
 type CatalogCard {
   id: ID
+  cardId: String
   name: String
   number: String
-  set_code: String
+  setCode: String
   rarity: String
-  image_small: String
-  image_large: String
   supertype: String
   subtype: String
+  images: CardImage
+  set: CardSetRef
+  variants: [CardVariant]
+  latestPrices: [CardPrice]
 }
 
 # ── Price Alerts ───────────────────────────────────────────────────────────────

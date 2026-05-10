@@ -38,7 +38,12 @@ export async function searchCards({ q, setCode, rarity, supertype, withPrices = 
     where.name = { [Op.like]: `%${q}%` };
   }
   if (setCode) {
-    where.set_code = setCode;
+    // Accept either the internal set code (e.g. "sv08") or its abbreviation (e.g. "SSP")
+    const resolvedSet = await Set.findOne({
+      where: { [Op.or]: [{ code: setCode }, { abbreviation: setCode }] },
+      attributes: ['code'],
+    });
+    where.set_code = resolvedSet ? resolvedSet.code : setCode;
   }
   if (rarity) {
     where.rarity = { [Op.like]: `%${rarity}%` };
@@ -48,7 +53,7 @@ export async function searchCards({ q, setCode, rarity, supertype, withPrices = 
   }
 
   const offset = (Math.max(1, page) - 1) * pageSize;
-  const limit = Math.min(200, Math.max(1, pageSize));
+  const limit = Math.min(1500, Math.max(1, pageSize));
 
   const SET_PUBLIC_ATTRS = ['code', 'name', 'era', 'release_date', 'set_logo', 'set_symbol'];
   const include = [
