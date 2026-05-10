@@ -1,6 +1,6 @@
 {
   "name": "@sixbyfive/api-types",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "publishConfig": {
     "registry": "https://npm.pkg.github.com",
