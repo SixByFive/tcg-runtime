@@ -2,7 +2,6 @@ import { Router } from 'express';
 import { Op } from 'sequelize';
 import { requireAuth } from '../middleware/auth.js';
 import { Order, OrderDispute, CardListing, OwnershipRecord, UserReputation } from '../models/index.js';
-import { getRates, createLabel } from '../services/shipping.service.js';
 import {
   capturePaymentIntent, cancelPaymentIntent, refundPaymentIntent,
 } from '../services/stripe.service.js';
@@ -63,38 +62,16 @@ router.get('/:id', requireAuth, async (req, res) => {
   }
 });
 
-// ─── GET /:id/shipping-rates — seller gets rates before buying label ──────────
+// ─── GET /:id/shipping-rates — not implemented (shipping provider TBD) ────────
 
-router.post('/:id/shipping-rates', requireAuth, async (req, res) => {
-  const { sellerAddress, buyerAddress } = req.body;
-  if (!sellerAddress || !buyerAddress) {
-    return res.status(400).json({ error: 'sellerAddress and buyerAddress are required' });
-  }
-
-  try {
-    const order = await Order.findByPk(req.params.id, {
-      include: [{ model: CardListing, as: null, required: false }],
-    });
-    if (!order) return res.status(404).json({ error: 'Order not found' });
-    if (order.sellerId !== req.user.sub) return res.status(403).json({ error: 'Not your order' });
-    if (order.paymentStatus !== 'authorised') {
-      return res.status(409).json({ error: 'Order payment not yet authorised' });
-    }
-
-    const listing = await CardListing.findByPk(order.listingId);
-    const parcelSize = listing?.parcelSize || 'LARGE_LETTER';
-
-    const result = await getRates({ fromAddress: sellerAddress, toAddress: buyerAddress, parcelSize });
-    res.json(result);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+router.post('/:id/shipping-rates', requireAuth, (_req, res) => {
+  res.status(501).json({ error: 'Shipping label generation is not yet available — shipping provider not configured' });
 });
 
 // ─── POST /:id/ship — seller creates label and marks shipped ──────────────────
 
 router.post('/:id/ship', requireAuth, async (req, res) => {
-  const { shipmentId, rateId, trackingNumber, trackingCarrier } = req.body;
+  const { trackingNumber, trackingCarrier } = req.body;
 
   try {
     const order = await Order.findByPk(req.params.id);
@@ -107,17 +84,9 @@ router.post('/:id/ship', requireAuth, async (req, res) => {
       return res.status(409).json({ error: 'Order is already shipped' });
     }
 
-    let labelUrl    = null;
-    let tracking    = trackingNumber || null;
-    let carrier     = trackingCarrier || null;
-
-    // If using EasyPost label creation
-    if (shipmentId && rateId) {
-      const label = await createLabel({ shipmentId, rateId });
-      labelUrl = label.labelUrl;
-      tracking = label.trackingNumber;
-      carrier  = label.carrier;
-    }
+    const labelUrl = null;
+    const tracking = trackingNumber || null;
+    const carrier  = trackingCarrier || null;
 
     if (!tracking) return res.status(400).json({ error: 'trackingNumber is required' });
 

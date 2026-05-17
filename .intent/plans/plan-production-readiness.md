@@ -4,9 +4,9 @@ title: Production deployment readiness
 type: plan
 status: draft
 created: "2026-05-08T00:00:00.000Z"
-updated: "2026-05-08T00:00:00.000Z"
+updated: "2026-05-14T00:00:00.000Z"
 system: sys-infra
-decisions: [DEC-0001, DEC-0004]
+decisions: [DEC-0001, DEC-0004, DEC-0009]
 constraints: [CON-0001, CON-0002]
 tags: [production, deployment, security]
 ---
@@ -26,12 +26,11 @@ The backend is functionally complete for local development. Several secrets, con
 - [ ] `ACCESS_TOKEN_SECRET` — `openssl rand -hex 64` — must match across auth, gateway, marketplace, payments, realtime
 - [ ] `INTERNAL_API_KEY` — `openssl rand -hex 32` — shared across all services
 - [ ] `DB_PASS` — strong MySQL root/user password
-- [ ] `STRIPE_SECRET_KEY` — use live key (not `sk_test_`)
-- [ ] `STRIPE_WEBHOOK_SECRET` — from Stripe webhook endpoint settings
-- [ ] `EASYPOST_API_KEY` — from EasyPost dashboard
+- [ ] `STRIPE_SECRET_KEY` — use live key (not `sk_test_`) *(deferred — not required for initial launch)*
+- [ ] `STRIPE_WEBHOOK_SECRET` — from Stripe webhook endpoint settings *(deferred)*
 - [ ] `GOOGLE_CLIENT_ID` — from Google Cloud Console
 - [ ] `DISCORD_CLIENT_ID` / `DISCORD_CLIENT_SECRET` / `DISCORD_BOT_TOKEN`
-- [ ] `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_USER`, `EMAIL_PASS`, `EMAIL_FROM`
+- [ ] `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_FROM`
 - [ ] `ADMIN_API_KEY` — catalog-service admin operations
 
 ### Infrastructure
@@ -54,7 +53,7 @@ The backend is functionally complete for local development. Several secrets, con
 
 - [ ] Run `pnpm health:strict` — all services healthy
 - [ ] Test login/register flow (web + mobile)
-- [ ] Test Stripe webhook delivery from Stripe dashboard
+- [ ] Test Stripe webhook delivery from Stripe dashboard *(deferred)*
 - [ ] Test card search, collection, binder CRUD
 - [ ] Test messaging (send/receive, unread badge)
 - [ ] Test push notification delivery on real device

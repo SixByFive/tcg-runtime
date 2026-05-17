@@ -36,5 +36,5 @@ The mobile app previously used `@sixbyfive/tcg-binder` (generated client for a W
 ## Known gaps (mobile side, not gateway)
 
 These are gaps in the mobile app, not the gateway schema:
-- `MoveBinderSlot` / `RemoveBinderSlot` — mobile stubs to `saveBinderPagesAndSlots` (migration needed)
-- `cardSetCompletion` — mobile app uses this; not in gateway schema yet
+- ~~`MoveBinderSlot` / `RemoveBinderSlot`~~ — resolved 2026-05-17: mobile `moveSlot`/`removeSlot` rewritten to use `saveBinderPagesAndSlots` with full pages payload; stubs removed
+- ~~`cardSetCompletion`~~ — resolved 2026-05-17: `cardSetCompletion(setCode: String!): CardSetCompletion!` added to gateway schema; backed by `collections-service GET /collection/set-completion`

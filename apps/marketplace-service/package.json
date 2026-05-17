@@ -13,7 +13,6 @@
     "@sbf/contracts": "workspace:*",
     "@sbf/database": "workspace:*",
     "@sbf/logger": "workspace:*",
-    "@easypost/api": "^6.4.1",
     "cookie-parser": "^1.4.7",
     "cross-env": "^7.0.3",
     "express": "^4.21.2",

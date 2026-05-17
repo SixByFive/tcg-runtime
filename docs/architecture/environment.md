@@ -11,6 +11,19 @@ Environment files live in `env/` and are loaded in this order (later files overr
 
 ---
 
+## Local Development — Email (Mailpit)
+
+The Docker Compose stack includes a [Mailpit](https://mailpit.axllent.org/) container that catches all outbound email without delivering to real inboxes.
+
+- **Web UI**: [http://localhost:8025](http://localhost:8025) — view all caught emails here
+- **SMTP**: `localhost:1025` (no auth, no TLS)
+
+`auth-service` and `notifications-service` default to `SMTP_HOST=mailpit` / `SMTP_PORT=1025` when no override is provided, so email works out of the box in Docker Compose. To override with a real SMTP provider, set `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, and `SMTP_PASS` in your shell or a `.env.override` before running compose.
+
+When running services **natively** (outside Docker), emails are silently skipped and logged to the console unless `SMTP_HOST` is explicitly set.
+
+---
+
 ## Shared Variables (`env/.env.shared`)
 
 | Variable | Default | Description |
@@ -47,10 +60,11 @@ Environment files live in `env/` and are loaded in this order (later files overr
 | `DISCORD_CLIENT_ID` | Discord OAuth app client ID |
 | `DISCORD_CLIENT_SECRET` | Discord OAuth app secret |
 | `DISCORD_BOT_TOKEN` | Discord bot token (for guild membership checks) |
-| `EMAIL_HOST` | SMTP host |
-| `EMAIL_PORT` | SMTP port |
-| `EMAIL_USER` | SMTP username |
-| `EMAIL_PASS` | SMTP password |
+| `SMTP_HOST` | SMTP host |
+| `SMTP_PORT` | SMTP port (default `465`) |
+| `SMTP_SECURE` | `true` for TLS/SSL, `false` for STARTTLS |
+| `SMTP_USER` | SMTP username |
+| `SMTP_PASS` | SMTP password |
 | `EMAIL_FROM` | Sender address (`"SixByFive TCG" <noreply@…>`) |
 
 ---
@@ -128,8 +142,7 @@ Before going live, replace every placeholder with a real value:
 - [ ] `DB_PASS` — strong MySQL password
 - [ ] `STRIPE_SECRET_KEY` — from Stripe dashboard (use live key in production)
 - [ ] `STRIPE_WEBHOOK_SECRET` — from Stripe webhook endpoint settings
-- [ ] `EASYPOST_API_KEY` — from EasyPost dashboard
 - [ ] `GOOGLE_CLIENT_ID` — from Google Cloud Console
 - [ ] `DISCORD_CLIENT_ID` / `DISCORD_CLIENT_SECRET` — from Discord developer portal
-- [ ] `EMAIL_*` — SMTP credentials
+- [ ] `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_FROM` — SMTP credentials
 - [ ] `ADMIN_API_KEY` — catalog-service admin key (set in docker-compose env)

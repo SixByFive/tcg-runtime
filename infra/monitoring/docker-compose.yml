@@ -1,0 +1,16 @@
+name: SBF-TCG-Monitoring
+
+services:
+  uptime-kuma:
+    container_name: UptimeKuma
+    image: louislam/uptime-kuma:1
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    volumes:
+      - uptime_kuma_data:/app/data
+    mem_limit: 256m
+    mem_reservation: 64m
+
+volumes:
+  uptime_kuma_data:

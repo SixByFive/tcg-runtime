@@ -160,6 +160,10 @@ export const resolvers = {
 
     // ── Collection ──────────────────────────────────────────────────────────────
 
+    cardSetCompletion: async (_, { setCode }, { token, req, clients }) => {
+      return clients.collections.getSetCompletion(token, req, setCode);
+    },
+
     myCollection: async (_, __, { token, req, clients, logger }) => {
       const entries = await clients.collections.getMyCollection(token, req);
       return hydrateCards(entries, clients.catalog, logger);
@@ -413,24 +417,11 @@ export const resolvers = {
     },
 
     // ── Shipping ─────────────────────────────────────────────────────────────────
+    // Shipping label generation is not yet available (provider not configured).
 
-    shippingRates: async (_, { to, from, parcel, parcelSize }, { token, clients, logger }) => {
-      try {
-        return await clients.shipping.getRates(token, { to, from, parcel, parcelSize });
-      } catch (error) {
-        logger.warn(`shippingRates failed: ${error.message}`);
-        return [];
-      }
-    },
+    shippingRates: async () => [],
 
-    shippingLabel: async (_, { id }, { token, clients, logger }) => {
-      try {
-        return await clients.shipping.getLabel(token, id);
-      } catch (error) {
-        logger.warn(`shippingLabel failed: ${error.message}`);
-        return null;
-      }
-    },
+    shippingLabel: async () => null,
 
     // ── Rewards ──────────────────────────────────────────────────────────────────
 
@@ -1491,23 +1482,14 @@ export const resolvers = {
     },
 
     // ── Shipping mutations ────────────────────────────────────────────────────
+    // Shipping label generation is not yet available (provider not configured).
 
-    createShippingLabel: async (_, args, { token, clients, logger }) => {
-      try {
-        return await clients.shipping.createLabel(token, args);
-      } catch (error) {
-        logger.warn(`createShippingLabel failed: ${error.message}`);
-        throw error;
-      }
+    createShippingLabel: async () => {
+      throw new Error('Shipping label generation is not yet available.');
     },
 
-    cancelShippingLabel: async (_, { id }, { token, clients, logger }) => {
-      try {
-        return await clients.shipping.cancelLabel(token, id);
-      } catch (error) {
-        logger.warn(`cancelShippingLabel failed: ${error.message}`);
-        throw error;
-      }
+    cancelShippingLabel: async () => {
+      throw new Error('Shipping label generation is not yet available.');
     },
 
     // ── Push notifications ─────────────────────────────────────────────────────

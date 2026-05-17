@@ -1,7 +1,6 @@
 import { Router } from 'express';
 import { Order, SellerProfile } from '../models/index.js';
 import { constructWebhookEvent } from '../services/stripe.service.js';
-import { parseTrackingWebhook } from '../services/shipping.service.js';
 import { notifyUser, NotificationType } from '@sbf/contracts';
 import { createLogger } from '@sbf/logger';
 
@@ -127,32 +126,5 @@ router.post('/stripe', async (req, res) => {
   res.json({ received: true });
 });
 
-// ─── EasyPost tracking webhook ────────────────────────────────────────────────
-
-router.post('/easypost', async (req, res) => {
-  try {
-    const tracking = parseTrackingWebhook(req.body);
-    if (!tracking?.trackingCode) return res.json({ ok: true });
-
-    const order = await Order.findOne({ where: { trackingNumber: tracking.trackingCode } });
-    if (!order) return res.json({ ok: true });
-
-    if (tracking.status === 'delivered') {
-      // Don't auto-complete — buyer must confirm receipt. Just notify.
-      await notifyUser({
-        userId: order.buyerId,
-        type:   NotificationType.INFO,
-        title:  'Your order has been delivered',
-        body:   'EasyPost shows your card as delivered. Please confirm receipt to release payment to the seller.',
-        linkUrl: `/orders/${order.id}`,
-        meta:   { orderId: order.id, trackingCode: tracking.trackingCode },
-      }).catch(() => {});
-    }
-  } catch (err) {
-    logger.error(`EasyPost webhook error: ${err.message}`);
-  }
-
-  res.json({ ok: true });
-});
 
 export default router;

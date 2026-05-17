@@ -233,6 +233,13 @@ export async function adminDeleteBinder(token, id, permanent = false) {
   return result?.ok ?? true;
 }
 
+export async function getSetCompletion(token, req, setCode) {
+  return request(`/collection/set-completion?setCode=${encodeURIComponent(setCode)}`, {
+    method: 'GET',
+    headers: authHeaders(token, req),
+  });
+}
+
 export async function adminGetCollectionSummary(token, { search, limit = 200 } = {}) {
   const p = new URLSearchParams({ limit: String(limit) });
   if (search) p.set('search', search);

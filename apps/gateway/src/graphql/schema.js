@@ -21,6 +21,7 @@ export const typeDefs = gql`
     myCollection: [CollectionEntry!]!
     collection(userId: ID!): [CollectionEntry!]!
     collectionEntry(cardId: String!, variation: String): CollectionEntry
+    cardSetCompletion(setCode: String!): CardSetCompletion!
 
     # ── Wishlist ────────────────────────────────────────────────────────────────
     myWishlist(page: Int, pageSize: Int): WishlistPage!
@@ -839,6 +840,11 @@ export const typeDefs = gql`
   }
 
   # ── Collection ────────────────────────────────────────────────────────────────
+
+  type CardSetCompletion {
+    ownedCardIds: [String!]!
+    total: Int!
+  }
 
   type CollectionEntry {
     id: ID!

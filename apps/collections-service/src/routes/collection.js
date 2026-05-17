@@ -67,6 +67,26 @@ router.get('/entry', requireAuth, async (req, res) => {
   }
 });
 
+// GET /collection/set-completion?setCode= — card IDs owned by the user for a given set
+router.get('/set-completion', requireAuth, async (req, res) => {
+  const { setCode } = req.query;
+  if (!setCode) return res.status(400).json({ error: 'setCode required' });
+  try {
+    const entries = await Collection.findAll({
+      where: {
+        userId: req.user.sub,
+        cardId: { [Op.like]: `${setCode.toLowerCase()}-%` },
+        wishlist: false,
+      },
+      attributes: ['cardId'],
+    });
+    const ownedCardIds = entries.map((e) => e.cardId);
+    res.json({ ownedCardIds, total: ownedCardIds.length });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /collection/:userId — public view of a user's collection
 router.get('/:userId', async (req, res) => {
   try {
