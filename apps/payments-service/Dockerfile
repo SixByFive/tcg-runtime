@@ -3,6 +3,7 @@ FROM node:22-alpine
 WORKDIR /app
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY packages/auth      ./packages/auth
 COPY packages/config    ./packages/config
 COPY packages/contracts ./packages/contracts
 COPY packages/database  ./packages/database
