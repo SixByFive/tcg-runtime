@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { Op } from 'sequelize';
 import { UserSubscription, SubscriptionPlan, Transaction } from '../models/index.js';
 import { constructWebhookEvent } from '../services/stripe.service.js';
+import { completeTopup } from '../services/wallet.service.js';
 import { notifyUser, NotificationType } from '@sbf/contracts';
 import { createLogger } from '@sbf/logger';
 
@@ -165,6 +166,37 @@ router.post('/stripe', async (req, res) => {
           body:    `Your ${sub.plan?.name ?? ''} subscription has ended. You've been moved to the free tier.`,
           linkUrl: '/account/subscription',
         }).catch(() => {});
+        break;
+      }
+
+      // ── Wallet top-up completed ───────────────────────────────────────────
+      case 'payment_intent.succeeded': {
+        const pi = event.data.object;
+        if (pi.metadata?.type !== 'wallet_topup') break;
+
+        await completeTopup(pi.id);
+
+        await notifyUser({
+          userId:  pi.metadata.userId,
+          type:    NotificationType.PAYMENT_SUCCESS,
+          title:   'Wallet topped up',
+          body:    `£${(pi.amount / 100).toFixed(2)} has been added to your wallet.`,
+          linkUrl: '/account/wallet',
+        }).catch(() => {});
+        break;
+      }
+
+      // ── Wallet top-up failed ──────────────────────────────────────────────
+      case 'payment_intent.payment_failed': {
+        const pi = event.data.object;
+        if (pi.metadata?.type !== 'wallet_topup') break;
+
+        // Mark the pending transaction as failed
+        const { WalletTransaction } = await import('../models/index.js');
+        await WalletTransaction.update(
+          { status: 'failed' },
+          { where: { stripePaymentIntentId: pi.id, status: 'pending' } },
+        );
         break;
       }
 

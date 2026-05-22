@@ -63,3 +63,16 @@ export async function cancelLabel(token, id) {
   });
   return true;
 }
+
+export async function getLabelTracking(token, id) {
+  return request(`/shipping/labels/${encodeURIComponent(id)}/tracking`, {
+    headers: authHeaders(token),
+  });
+}
+
+export async function getOrderTracking(orderId) {
+  const key = process.env.INTERNAL_API_KEY;
+  return request(`/internal/shipping/order/${encodeURIComponent(orderId)}/tracking`, {
+    headers: key ? { 'x-internal-key': key } : {},
+  });
+}

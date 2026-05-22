@@ -123,6 +123,12 @@ System: sys-infra
 > ## Context
 > Background tasks (escrow expiry, offer expiry, price alert checks, wishlist fan-out) could live inside their respective domain services or be centralised in a dedicated worker.
 
+**DEC-0009** — Stripe / payments deferred; EasyPost removed `[active]`
+System: sys-marketplace
+
+> ## Decision
+> Stripe integration (payments-service, marketplace-service checkout, webhook handling) is **deferred from the initial production launch**.
+
 ### Systems
 
 **sys-auth** — Auth Service

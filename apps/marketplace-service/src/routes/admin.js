@@ -8,6 +8,8 @@ import {
 } from '../services/stripe.service.js';
 import { notifyUser, NotificationType } from '@sbf/contracts';
 
+import { Op, fn, col, literal } from 'sequelize';
+
 const router = Router();
 router.use(requireAdmin);
 
@@ -147,7 +149,7 @@ router.post('/listings/:id/reject-proof', async (req, res) => {
 // PATCH /admin/orders/:id/fulfilment-status — update fulfilment status
 router.patch('/orders/:id/fulfilment-status', async (req, res) => {
   const { status } = req.body;
-  const VALID = ['awaiting_shipment', 'shipped', 'completed', 'cancelled'];
+  const VALID = ['pending', 'awaiting_shipment', 'shipped', 'completed', 'disputed', 'cancelled'];
   if (!status || !VALID.includes(status)) {
     return res.status(400).json({ error: `status must be one of: ${VALID.join(', ')}` });
   }
@@ -320,6 +322,84 @@ router.get('/disputes', async (req, res) => {
       limit: 200,
     });
     res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /admin/revenue-summary — marketplace-side revenue aggregation
+router.get('/revenue-summary', async (req, res) => {
+  try {
+    const now    = new Date();
+    const day7   = new Date(now - 7  * 86400000);
+    const day30  = new Date(now - 30 * 86400000);
+
+    // Pull all orders that actually resulted in a payment
+    const orders = await Order.findAll({
+      where: { paymentStatus: { [Op.in]: ['captured', 'refunded'] } },
+      attributes: ['salePrice', 'platformFee', 'shippingCost', 'totalAmount',
+                   'walletAmountPence', 'paymentStatus', 'fulfilmentStatus',
+                   'capturedAt', 'createdAt'],
+    });
+
+    const captured  = orders.filter((o) => o.paymentStatus === 'captured');
+    const refunded  = orders.filter((o) => o.paymentStatus === 'refunded');
+
+    const sum = (rows, field) =>
+      rows.reduce((acc, r) => acc + Number(r[field] ?? 0), 0);
+
+    const gmv             = sum(captured, 'salePrice');
+    const platformFees    = sum(captured, 'platformFee');
+    const shippingCollected = sum(captured, 'shippingCost');
+    const walletUsed      = captured.reduce((acc, o) => acc + (o.walletAmountPence ?? 0) / 100, 0);
+    const refundedTotal   = sum(refunded, 'totalAmount');
+
+    const cap30 = captured.filter((o) => new Date(o.capturedAt || o.createdAt) >= day30);
+    const cap7  = captured.filter((o) => new Date(o.capturedAt || o.createdAt) >= day7);
+
+    // Estimated Stripe fees: 1.4% + £0.20 per captured order (EU card rate)
+    const stripeFeeEstimate = captured.length * 0.20 + sum(captured, 'totalAmount') * 0.014;
+
+    // Dispute stats
+    const disputes = await OrderDispute.findAll({ attributes: ['status'] });
+    const openDisputes     = disputes.filter((d) => d.status === 'open').length;
+    const resolvedDisputes = disputes.filter((d) => d.status === 'resolved').length;
+
+    // Monthly GMV for last 6 months
+    const monthly = {};
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now);
+      d.setDate(1);
+      d.setMonth(d.getMonth() - i);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      monthly[key] = { gmv: 0, fees: 0, orders: 0 };
+    }
+    for (const o of captured) {
+      const d   = new Date(o.capturedAt || o.createdAt);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      if (monthly[key]) {
+        monthly[key].gmv    += Number(o.salePrice ?? 0);
+        monthly[key].fees   += Number(o.platformFee ?? 0);
+        monthly[key].orders += 1;
+      }
+    }
+
+    res.json({
+      // Totals
+      gmv, platformFees, shippingCollected, walletUsed, refundedTotal, stripeFeeEstimate,
+      // Windowed
+      gmv30d:        sum(cap30, 'salePrice'),
+      gmv7d:         sum(cap7,  'salePrice'),
+      platformFees30d: sum(cap30, 'platformFee'),
+      // Counts
+      totalOrders:     orders.length,
+      completedOrders: captured.filter((o) => o.fulfilmentStatus === 'completed').length,
+      openDisputes,
+      resolvedDisputes,
+      // Monthly breakdown
+      monthly: Object.entries(monthly).map(([month, v]) => ({ month, ...v })),
+      currency: 'GBP',
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

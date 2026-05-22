@@ -79,10 +79,11 @@ export async function createEscrowPaymentIntent({
   currency = 'gbp',
   sellerStripeAccountId,
   orderId,
+  platformFeePence,   // Pass the pre-calculated fee; falls back to calculateFee if omitted
   metadata = {},
 }) {
   const s   = getStripe();
-  const fee = calculateFee(amountPence);
+  const fee = platformFeePence ?? calculateFee(amountPence);
 
   const params = {
     amount:         amountPence,

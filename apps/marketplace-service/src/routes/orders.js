@@ -1,11 +1,28 @@
 import { Router } from 'express';
 import { Op } from 'sequelize';
 import { requireAuth } from '../middleware/auth.js';
-import { Order, OrderDispute, CardListing, OwnershipRecord, UserReputation } from '../models/index.js';
+import { Order, OrderDispute, CardListing, OwnershipRecord, UserReputation, SellerProfile } from '../models/index.js';
 import {
-  capturePaymentIntent, cancelPaymentIntent, refundPaymentIntent,
+  capturePaymentIntent, cancelPaymentIntent, refundPaymentIntent, createEscrowPaymentIntent,
 } from '../services/stripe.service.js';
 import { notifyUser, NotificationType } from '@sbf/contracts';
+
+const SHIPPING_SERVICE_URL = process.env.SHIPPING_SERVICE_URL || 'http://localhost:4026';
+const INTERNAL_KEY         = process.env.INTERNAL_API_KEY;
+
+async function bookShippingLabel({ orderId, sellerId, from, to, parcelSize, declaredValue }) {
+  const res = await fetch(`${SHIPPING_SERVICE_URL}/internal/shipping/book-for-order`, {
+    method:  'POST',
+    headers: {
+      'Content-Type':  'application/json',
+      ...(INTERNAL_KEY ? { 'x-internal-key': INTERNAL_KEY } : {}),
+    },
+    body: JSON.stringify({ orderId, sellerId, from, to, parcelSize, declaredValue }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || `Shipping service error ${res.status}`);
+  return data;
+}
 
 const FEEDBACK_WINDOW_DAYS = 30;
 
@@ -62,17 +79,9 @@ router.get('/:id', requireAuth, async (req, res) => {
   }
 });
 
-// ─── GET /:id/shipping-rates — not implemented (shipping provider TBD) ────────
-
-router.post('/:id/shipping-rates', requireAuth, (_req, res) => {
-  res.status(501).json({ error: 'Shipping label generation is not yet available — shipping provider not configured' });
-});
-
-// ─── POST /:id/ship — seller creates label and marks shipped ──────────────────
+// ─── POST /:id/ship — auto-create tracked label and mark shipped ──────────────
 
 router.post('/:id/ship', requireAuth, async (req, res) => {
-  const { trackingNumber, trackingCarrier } = req.body;
-
   try {
     const order = await Order.findByPk(req.params.id);
     if (!order) return res.status(404).json({ error: 'Order not found' });
@@ -84,30 +93,79 @@ router.post('/:id/ship', requireAuth, async (req, res) => {
       return res.status(409).json({ error: 'Order is already shipped' });
     }
 
-    const labelUrl = null;
-    const tracking = trackingNumber || null;
-    const carrier  = trackingCarrier || null;
+    // ── Resolve buyer address (stored on order at purchase time)
+    const buyerAddr = order.buyerAddressJson;
+    if (!buyerAddr?.postcode) {
+      return res.status(422).json({ error: 'Buyer address is missing or incomplete' });
+    }
 
-    if (!tracking) return res.status(400).json({ error: 'trackingNumber is required' });
+    // ── Resolve seller return address from profile
+    const profile = await SellerProfile.findByPk(req.user.sub);
+    if (!profile?.returnPostcode) {
+      return res.status(422).json({
+        error: 'Your return address is not set. Please add it in your seller settings before shipping.',
+      });
+    }
 
+    const from = {
+      name:     profile.returnName,
+      line1:    profile.returnLine1,
+      line2:    profile.returnLine2,
+      city:     profile.returnCity,
+      postcode: profile.returnPostcode,
+      country:  profile.returnCountry || 'GB',
+      phone:    profile.returnPhone,
+      email:    profile.returnEmail,
+    };
+
+    // ── Resolve parcel size from listing
+    const listing = await CardListing.findByPk(order.listingId, {
+      attributes: ['parcelSize', 'price'],
+    });
+    const parcelSize = listing?.parcelSize ?? 'LARGE_LETTER';
+
+    // ── Book label via shipping-service
+    const label = await bookShippingLabel({
+      orderId:       order.id,
+      sellerId:      req.user.sub,
+      from,
+      to:            buyerAddr,
+      parcelSize,
+      declaredValue: Number(order.salePrice) || 10,
+    });
+
+    // ── Persist tracking on order
     await order.update({
       fulfilmentStatus: 'shipped',
-      trackingNumber:   tracking,
-      trackingCarrier:  carrier,
-      shippingLabelUrl: labelUrl,
+      trackingNumber:   label.trackingNumber,
+      trackingCarrier:  label.carrier,
+      shippingLabelUrl: label.labelUrl,
+      shippingLabelId:  label.labelId,
       shippedAt:        new Date(),
     });
 
+    // ── Notify buyer
     await notifyUser({
-      userId: order.buyerId,
-      type:   NotificationType.INFO,
-      title:  'Your order has been shipped!',
-      body:   `Tracking: ${tracking}${carrier ? ` via ${carrier}` : ''}`,
+      userId:  order.buyerId,
+      type:    NotificationType.INFO,
+      title:   'Your order has been shipped!',
+      body:    label.trackingNumber
+        ? `Tracking number: ${label.trackingNumber}${label.carrier ? ` via ${label.carrier}` : ''}`
+        : 'Your order is on its way.',
       linkUrl: `/orders/${order.id}`,
-      meta:   { orderId: order.id, trackingNumber: tracking },
+      meta:    { orderId: order.id, trackingNumber: label.trackingNumber },
     }).catch(() => {});
 
-    res.json({ ok: true, trackingNumber: tracking, labelUrl });
+    res.json({
+      ok:             true,
+      trackingNumber: label.trackingNumber,
+      trackingUrl:    label.trackingUrl,
+      labelUrl:       label.labelUrl,
+      labelBase64:    label.labelBase64,
+      carrier:        label.carrier,
+      service:        label.service,
+      labelCost:      label.amount,
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -135,6 +193,37 @@ router.post('/:id/received', requireAuth, async (req, res) => {
       capturedAt:       new Date(),
       completedAt:      new Date(),
     });
+
+    // If seller has no Stripe Connect account, credit their platform wallet instead.
+    // Net = salePrice + sellerShippingCost - platformFee.
+    // If the buyer paid for the label (labelQuotePence in metadataJson), that portion
+    // stays with the platform to cover P2G PrePay — exclude it from seller credit.
+    if (!order.sellerStripeAccountId) {
+      const labelQuotePence = order.metadataJson?.labelQuotePence ?? 0;
+      const netPence = Math.round(
+        (Number(order.salePrice) + Number(order.shippingCost)) * 100
+      ) - Math.round(Number(order.platformFee) * 100) - labelQuotePence;
+      if (netPence > 0) {
+        const paymentsUrl = process.env.PAYMENTS_SERVICE_URL || 'http://localhost:4019';
+        const key         = process.env.INTERNAL_API_KEY;
+        await fetch(`${paymentsUrl}/internal/wallet/credit`, {
+          method:  'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(key ? { 'x-internal-key': key } : {}),
+          },
+          body: JSON.stringify({
+            userId:      order.sellerId,
+            amountPence: netPence,
+            orderId:     order.id,
+            description: `Sale: order ${order.id.slice(0, 8)} — £${(netPence / 100).toFixed(2)}`,
+          }),
+        }).catch((err) => {
+          // Non-fatal: log and continue — order is still complete, credit can be retried
+          console.error(`[orders] wallet credit failed for order ${order.id}: ${err.message}`);
+        });
+      }
+    }
 
     // Write ownership record
     await OwnershipRecord.create({
@@ -313,6 +402,25 @@ router.post('/:id/cancel', requireAuth, async (req, res) => {
       await cancelPaymentIntent(order.stripePaymentIntentId);
     }
 
+    // Refund wallet portion
+    if (order.walletAmountPence > 0) {
+      const paymentsUrl = process.env.PAYMENTS_SERVICE_URL || 'http://localhost:4019';
+      const key = process.env.INTERNAL_API_KEY;
+      await fetch(`${paymentsUrl}/internal/wallet/refund-purchase`, {
+        method:  'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(key ? { 'x-internal-key': key } : {}),
+        },
+        body: JSON.stringify({
+          userId:      order.buyerId,
+          amountPence: order.walletAmountPence,
+          orderId:     order.id,
+          description: `Cancelled: order ${order.id.slice(0, 8)}`,
+        }),
+      }).catch((e) => console.error(`[orders] wallet refund on cancel failed: ${e.message}`));
+    }
+
     await order.update({
       paymentStatus:    'cancelled',
       fulfilmentStatus: 'cancelled',
@@ -339,6 +447,99 @@ router.post('/:id/cancel', requireAuth, async (req, res) => {
     }).catch(() => {});
 
     res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── POST /:id/apply-wallet — buyer applies wallet credit to a pending order ───
+//
+// Used when a seller accepts an offer and creates an order. The buyer can call
+// this before confirming card payment to reduce or eliminate the Stripe PI amount.
+// Cancels the existing PI and creates a new one for the residual card amount.
+
+router.post('/:id/apply-wallet', requireAuth, async (req, res) => {
+  const walletAmountPence = Math.round(Number(req.body.walletAmountPence) || 0);
+  if (!walletAmountPence || walletAmountPence <= 0) {
+    return res.status(400).json({ error: 'walletAmountPence must be a positive integer' });
+  }
+
+  try {
+    const order = await Order.findByPk(req.params.id);
+    if (!order) return res.status(404).json({ error: 'Order not found' });
+    if (order.buyerId !== req.user.sub) return res.status(403).json({ error: 'Not your order' });
+    if (order.paymentStatus !== 'pending') {
+      return res.status(409).json({ error: 'Wallet can only be applied to pending (unpaid) orders' });
+    }
+    if (order.walletAmountPence > 0) {
+      return res.status(409).json({ error: 'Wallet is already applied to this order' });
+    }
+
+    const totalPence  = Math.round(Number(order.totalAmount) * 100);
+    const walletPence = Math.min(walletAmountPence, totalPence);
+    const cardPence   = totalPence - walletPence;
+
+    const paymentsUrl = process.env.PAYMENTS_SERVICE_URL || 'http://localhost:4019';
+    const key         = process.env.INTERNAL_API_KEY;
+
+    // Deduct from wallet
+    const walletRes = await fetch(`${paymentsUrl}/internal/wallet/spend`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', ...(key ? { 'x-internal-key': key } : {}) },
+      body: JSON.stringify({
+        userId:      req.user.sub,
+        amountPence: walletPence,
+        orderId:     order.id,
+        description: `Order ${order.id.slice(0, 8)} — wallet payment £${(walletPence / 100).toFixed(2)}`,
+      }),
+    });
+    if (!walletRes.ok) {
+      const errData = await walletRes.json().catch(() => ({}));
+      return res.status(walletRes.status).json({ error: errData.error || 'Wallet payment failed' });
+    }
+
+    // Cancel the existing Stripe PI (was created for full totalPence)
+    if (order.stripePaymentIntentId) {
+      await cancelPaymentIntent(order.stripePaymentIntentId).catch(() => {});
+    }
+
+    let clientSecret = null;
+
+    if (cardPence > 0 && order.sellerStripeAccountId) {
+      try {
+        const platformFeePence = Math.round(Number(order.platformFee) * 100);
+        const pi = await createEscrowPaymentIntent({
+          amountPence:           cardPence,
+          currency:              (order.currency || 'GBP').toLowerCase(),
+          sellerStripeAccountId: order.sellerStripeAccountId,
+          platformFeePence:      Math.round(platformFeePence * (cardPence / totalPence)),
+          orderId:               order.id,
+        });
+        await order.update({
+          walletAmountPence:     walletPence,
+          stripePaymentIntentId: pi.id,
+          stripeClientSecret:    pi.client_secret,
+        });
+        clientSecret = pi.client_secret;
+      } catch (stripeErr) {
+        // Refund wallet if PI creation fails
+        await fetch(`${paymentsUrl}/internal/wallet/refund-purchase`, {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json', ...(key ? { 'x-internal-key': key } : {}) },
+          body: JSON.stringify({ userId: req.user.sub, amountPence: walletPence, orderId: order.id }),
+        }).catch(() => {});
+        throw stripeErr;
+      }
+    } else if (cardPence === 0) {
+      await order.update({
+        walletAmountPence: walletPence,
+        paymentStatus:     'authorised',
+        fulfilmentStatus:  'awaiting_shipment',
+        authorisedAt:      new Date(),
+      });
+    }
+
+    res.json({ ok: true, clientSecret, walletAmountPence: walletPence, cardTotal: cardPence / 100 });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

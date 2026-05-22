@@ -10,6 +10,7 @@ import ordersRouter    from './routes/orders.js';
 import sellerRouter    from './routes/seller.js';
 import adminRouter     from './routes/admin.js';
 import webhooksRouter  from './routes/webhooks.js';
+import internalRouter  from './routes/internal.js';
 
 const serviceName = 'marketplace-service';
 const logger      = createLogger(serviceName);
@@ -46,6 +47,7 @@ app.use('/marketplace/offers',   offersRouter);
 app.use('/marketplace/orders',   ordersRouter);
 app.use('/marketplace/seller',   sellerRouter);
 app.use('/webhooks',             webhooksRouter);
+app.use('/internal/marketplace', internalRouter);
 
 // ─── Error handler ────────────────────────────────────────────────────────────
 app.use((err, _req, res, _next) => {

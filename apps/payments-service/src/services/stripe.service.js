@@ -1,7 +1,7 @@
 import Stripe from 'stripe';
 
 let _stripe;
-function getStripe() {
+export function getStripe() {
   if (!_stripe) {
     if (!process.env.STRIPE_SECRET_KEY) throw new Error('STRIPE_SECRET_KEY is not set');
     _stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2024-04-10' });
@@ -33,8 +33,8 @@ export async function createSubscriptionCheckout({ customerId, stripePriceId, us
     customer:   customerId,
     mode:       'subscription',
     line_items: [{ price: stripePriceId, quantity: 1 }],
-    success_url: `${process.env.APP_URL}/account/subscription?success=true&session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url:  `${process.env.APP_URL}/account/subscription?cancelled=true`,
+    success_url: `${process.env.APP_URL}/subscriptions?success=true&session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url:  `${process.env.APP_URL}/subscriptions?cancelled=true`,
     metadata:    { userId, planId },
     subscription_data: {
       metadata: { userId, planId },
@@ -118,6 +118,25 @@ export async function createStripePrice({ productId, unitAmount, currency = 'gbp
 
 export async function archiveStripePrice(priceId) {
   return getStripe().prices.update(priceId, { active: false });
+}
+
+// ─── Wallet top-up (PaymentIntent — custom Elements UI) ──────────────────────
+
+/**
+ * Creates a Stripe PaymentIntent for a wallet top-up.
+ * Returns the PaymentIntent object; caller extracts client_secret for the frontend.
+ * The webhook (payment_intent.succeeded) is responsible for crediting the wallet.
+ */
+export async function createWalletTopupIntent({ customerId, amountPence, userId }) {
+  return getStripe().paymentIntents.create({
+    amount:   amountPence,
+    currency: 'gbp',
+    customer: customerId || undefined,
+    // Save the payment method for future use (card on file)
+    setup_future_usage: 'on_session',
+    metadata: { userId, type: 'wallet_topup' },
+    automatic_payment_methods: { enabled: true },
+  });
 }
 
 // ─── Webhooks ─────────────────────────────────────────────────────────────────

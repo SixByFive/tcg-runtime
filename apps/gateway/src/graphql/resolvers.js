@@ -94,8 +94,27 @@ export const resolvers = {
     me: async (_, __, { token, clients, logger }) => {
       if (!token) return null;
       try {
-        const result = await clients.auth.getMe(token);
-        return result?.user || result || null;
+        const [authResult, safetyResult] = await Promise.allSettled([
+          clients.auth.getMe(token),
+          clients.users.getMySafetyProfile(token),
+        ]);
+
+        const user = authResult.status === 'fulfilled'
+          ? (authResult.value?.user || authResult.value || null)
+          : null;
+
+        if (!user) return null;
+
+        // Merge safety fields (dob, parentEmail, parentVerifiedAt, capabilities)
+        if (safetyResult.status === 'fulfilled' && safetyResult.value) {
+          const s = safetyResult.value;
+          user.dob              = s.dob              ?? user.dob              ?? null;
+          user.parentEmail      = s.parentEmail      ?? user.parentEmail      ?? null;
+          user.parentVerifiedAt = s.parentVerifiedAt ?? user.parentVerifiedAt ?? null;
+          user.capabilities     = s.capabilities     ?? user.capabilities     ?? null;
+        }
+
+        return user;
       } catch (error) {
         logger.warn(`me query failed: ${error.message}`);
         return null;
@@ -313,6 +332,15 @@ export const resolvers = {
       }
     },
 
+    myListings: async (_, args, { token, clients, logger }) => {
+      try {
+        return await clients.marketplace.getMyListings(token, args);
+      } catch (error) {
+        logger.warn(`myListings failed: ${error.message}`);
+        return [];
+      }
+    },
+
     myOrders: async (_, args, { token, clients, logger }) => {
       try {
         return await clients.marketplace.getMyOrders(token, args);
@@ -340,6 +368,15 @@ export const resolvers = {
       }
     },
 
+    sellerAddress: async (_, __, { token, clients, logger }) => {
+      try {
+        return await clients.marketplace.getSellerAddress(token);
+      } catch (error) {
+        logger.warn(`sellerAddress failed: ${error.message}`);
+        return {};
+      }
+    },
+
     listingOffers: async (_, { listingId }, { token, clients, logger }) => {
       try {
         return await clients.marketplace.getListingOffers(token, listingId);
@@ -354,6 +391,15 @@ export const resolvers = {
         return await clients.marketplace.getMyOffers(token);
       } catch (error) {
         logger.warn(`myOffers failed: ${error.message}`);
+        return [];
+      }
+    },
+
+    myIncomingOffers: async (_, __, { token, clients, logger }) => {
+      try {
+        return await clients.marketplace.getMyIncomingOffers(token);
+      } catch (error) {
+        logger.warn(`myIncomingOffers failed: ${error.message}`);
         return [];
       }
     },
@@ -373,6 +419,69 @@ export const resolvers = {
       } catch (error) {
         logger.warn(`adminOrders failed: ${error.message}`);
         return [];
+      }
+    },
+
+    adminProofQueue: async (_, _args, { token, clients, logger }) => {
+      try {
+        return await clients.marketplace.adminGetProofQueue(token);
+      } catch (error) {
+        logger.warn(`adminProofQueue failed: ${error.message}`);
+        return [];
+      }
+    },
+
+    adminOrderDisputes: async (_, { status }, { token, clients, logger }) => {
+      try {
+        return await clients.marketplace.adminGetDisputes(token, status);
+      } catch (error) {
+        logger.warn(`adminOrderDisputes failed: ${error.message}`);
+        return [];
+      }
+    },
+
+    adminSubscriptions: async (_, args, { token, clients, logger }) => {
+      try {
+        return await clients.payments.adminGetSubscriptions(token, args);
+      } catch (error) {
+        logger.warn(`adminSubscriptions failed: ${error.message}`);
+        return { subscriptions: [], total: 0, page: 1, pageSize: 50 };
+      }
+    },
+
+    adminAllTransactions: async (_, args, { token, clients, logger }) => {
+      try {
+        return await clients.payments.adminGetTransactions(token, args);
+      } catch (error) {
+        logger.warn(`adminAllTransactions failed: ${error.message}`);
+        return { transactions: [], total: 0, page: 1, pageSize: 50 };
+      }
+    },
+
+    adminRevenueSummary: async (_, __, { token, clients, logger }) => {
+      try {
+        return await clients.payments.adminGetRevenueSummary(token);
+      } catch (error) {
+        logger.warn(`adminRevenueSummary failed: ${error.message}`);
+        return { totalRevenue: 0, revenue30d: 0, revenue7d: 0, subRevenue: 0, productRevenue: 0, refunds: 0, currency: 'GBP' };
+      }
+    },
+
+    adminPlans: async (_, __, { token, clients, logger }) => {
+      try {
+        return await clients.payments.adminGetPlans(token);
+      } catch (error) {
+        logger.warn(`adminPlans failed: ${error.message}`);
+        return [];
+      }
+    },
+
+    adminMarketplaceRevenue: async (_, __, { token, clients, logger }) => {
+      try {
+        return await clients.marketplace.adminGetMarketplaceRevenue(token);
+      } catch (error) {
+        logger.warn(`adminMarketplaceRevenue failed: ${error.message}`);
+        return { gmv: 0, platformFees: 0, shippingCollected: 0, walletUsed: 0, refundedTotal: 0, stripeFeeEstimate: 0, gmv30d: 0, gmv7d: 0, platformFees30d: 0, totalOrders: 0, completedOrders: 0, openDisputes: 0, resolvedDisputes: 0, monthly: [], currency: 'GBP' };
       }
     },
 
@@ -417,11 +526,45 @@ export const resolvers = {
     },
 
     // ── Shipping ─────────────────────────────────────────────────────────────────
-    // Shipping label generation is not yet available (provider not configured).
 
-    shippingRates: async () => [],
+    shippingRates: async (_, { to, from, parcel, parcelSize }, { token, clients, logger }) => {
+      try {
+        return await clients.shipping.getRates(token, { to, from, parcel, parcelSize });
+      } catch (error) {
+        logger.warn(`shippingRates failed: ${error.message}`);
+        return [];
+      }
+    },
 
-    shippingLabel: async () => null,
+    shippingLabel: async (_, { id }, { token, clients, logger }) => {
+      try {
+        return await clients.shipping.getLabel(token, id);
+      } catch (error) {
+        logger.warn(`shippingLabel failed: ${error.message}`);
+        return null;
+      }
+    },
+
+    shippingLabelTracking: async (_, { id }, { token, clients, logger }) => {
+      try {
+        return await clients.shipping.getLabelTracking(token, id);
+      } catch (error) {
+        logger.warn(`shippingLabelTracking failed: ${error.message}`);
+        throw error;
+      }
+    },
+
+    orderTracking: async (_, { orderId }, { token, clients, logger }) => {
+      try {
+        // Verify the requesting user has access to this order (buyer or seller)
+        await clients.marketplace.getOrder(token, orderId);
+        // Then fetch tracking via internal endpoint (no re-auth needed)
+        return await clients.shipping.getOrderTracking(orderId);
+      } catch (error) {
+        logger.warn(`orderTracking failed for orderId=${orderId}: ${error.message}`);
+        return null;
+      }
+    },
 
     // ── Rewards ──────────────────────────────────────────────────────────────────
 
@@ -521,6 +664,25 @@ export const resolvers = {
       }
     },
 
+    hasAgreedToMarketplaceRules: async (_, __, { token, clients, logger }) => {
+      try {
+        return await clients.marketplace.hasAgreedToMarketplaceRules(token);
+      } catch (error) {
+        logger.warn(`hasAgreedToMarketplaceRules failed: ${error.message}`);
+        return false;
+      }
+    },
+
+    marketplaceRules: async (_, __, { clients, logger }) => {
+      try {
+        const data = await clients.marketplace.getMarketplaceRules();
+        return data?.rules ?? [];
+      } catch (error) {
+        logger.warn(`marketplaceRules failed: ${error.message}`);
+        return [];
+      }
+    },
+
     myMutedConversations: async (_, __, { token, clients, logger }) => {
       try {
         return await clients.messaging.getMyMutes(token);
@@ -559,9 +721,21 @@ export const resolvers = {
       }
     },
 
+    myWallet: async (_, { limit = 20, offset = 0 }, { token, clients, logger }) => {
+      if (!token) throw new Error('Not authenticated');
+      try {
+        return await clients.payments.getMyWallet(token, { limit, offset });
+      } catch (error) {
+        logger.warn(`myWallet failed: ${error.message}`);
+        throw error;
+      }
+    },
+
     mySubscription: async (_, __, { token, clients, logger }) => {
       try {
-        return await clients.payments.getMySubscription(token);
+        // payments-service returns { active, subscription } — unwrap to the sub object or null
+        const result = await clients.payments.getMySubscription(token);
+        return result?.subscription ?? null;
       } catch (error) {
         logger.warn(`mySubscription failed: ${error.message}`);
         return null;
@@ -571,7 +745,7 @@ export const resolvers = {
     myCapabilities: async (_, __, { token, clients, logger }) => {
       const FREE_DEFAULTS = {
         planName: 'Free', platformFeePercent: 8,
-        maxBinders: 3, maxCollectionCards: 500,
+        maxBinders: 3, maxCollectionCards: null, // collection is never capped
         maxActiveListings: 5, maxActiveTrades: 3, features: [],
       };
       if (!token) return FREE_DEFAULTS;
@@ -927,6 +1101,15 @@ export const resolvers = {
       }
     },
 
+    agreeToMarketplaceRules: async (_, __, { token, clients, logger }) => {
+      try {
+        return await clients.marketplace.agreeToMarketplaceRules(token);
+      } catch (error) {
+        logger.warn(`agreeToMarketplaceRules failed: ${error.message}`);
+        throw error;
+      }
+    },
+
     muteConversation: async (_, { userId, mutedUntil }, { token, clients, logger }) => {
       try {
         return await clients.messaging.muteConversation(token, userId, mutedUntil);
@@ -1092,6 +1275,33 @@ export const resolvers = {
       }
     },
 
+    submitListingProof: async (_, { id, image }, { token, clients, logger }) => {
+      try {
+        const data = await clients.marketplace.submitListingProof(token, id, image);
+        return {
+          ok:           data?.ok ?? true,
+          result:       data?.result ?? 'approved',
+          newProofCode: data?.newProofCode ?? null,
+        };
+      } catch (error) {
+        // 410 expired — service returns newProofCode in the error body
+        if (error.status === 410 || error.message?.includes('expired')) {
+          return { ok: false, result: 'expired', newProofCode: error.data?.newProofCode ?? null };
+        }
+        logger.warn(`submitListingProof failed: ${error.message}`);
+        throw error;
+      }
+    },
+
+    updateListing: async (_, { id, input }, { token, clients, logger }) => {
+      try {
+        return await clients.marketplace.updateListing(token, id, input);
+      } catch (error) {
+        logger.warn(`updateListing failed: ${error.message}`);
+        throw error;
+      }
+    },
+
     deleteListing: async (_, { id }, { token, clients, logger }) => {
       try {
         return await clients.marketplace.deleteListing(token, id);
@@ -1107,6 +1317,85 @@ export const resolvers = {
         return await clients.marketplace.buyListing(token, listingId, { buyerAddress, shippingRateId, shipmentId });
       } catch (error) {
         logger.warn(`createOrderFromListing failed: ${error.message}`);
+        throw error;
+      }
+    },
+
+    submitOrderTracking: async (_, { id, trackingNumber, carrier }, { token, clients, logger }) => {
+      try {
+        await clients.marketplace.submitOrderTracking(token, id, { trackingNumber, trackingCarrier: carrier });
+        return await clients.marketplace.getOrder(token, id);
+      } catch (error) {
+        logger.warn(`submitOrderTracking failed: ${error.message}`);
+        throw error;
+      }
+    },
+
+    applyWalletToOrder: async (_, { orderId, walletAmountPence }, { token, clients, logger }) => {
+      try {
+        return await clients.marketplace.applyWalletToOrder(token, orderId, walletAmountPence);
+      } catch (e) {
+        logger.warn(`applyWalletToOrder failed: ${e.message}`);
+        throw e;
+      }
+    },
+
+    shipOrder: async (_, { id }, { token, clients, logger }) => {
+      try {
+        const result = await clients.marketplace.shipOrder(token, id);
+        return { ok: true, ...result };
+      } catch (error) {
+        logger.warn(`shipOrder failed: ${error.message}`);
+        throw error;
+      }
+    },
+
+    updateSellerAddress: async (_, { input }, { token, clients, logger }) => {
+      try {
+        await clients.marketplace.updateSellerAddress(token, input);
+        return true;
+      } catch (error) {
+        logger.warn(`updateSellerAddress failed: ${error.message}`);
+        throw error;
+      }
+    },
+
+    confirmOrderReceived: async (_, { id }, { token, clients, logger }) => {
+      try {
+        await clients.marketplace.confirmOrderReceived(token, id);
+        return await clients.marketplace.getOrder(token, id);
+      } catch (error) {
+        logger.warn(`confirmOrderReceived failed: ${error.message}`);
+        throw error;
+      }
+    },
+
+    raiseOrderDispute: async (_, { id, reason }, { token, clients, logger }) => {
+      try {
+        await clients.marketplace.raiseOrderDispute(token, id, reason);
+        return await clients.marketplace.getOrder(token, id);
+      } catch (error) {
+        logger.warn(`raiseOrderDispute failed: ${error.message}`);
+        throw error;
+      }
+    },
+
+    cancelOrder: async (_, { id, reason }, { token, clients, logger }) => {
+      try {
+        await clients.marketplace.cancelOrder(token, id, reason);
+        return await clients.marketplace.getOrder(token, id);
+      } catch (error) {
+        logger.warn(`cancelOrder failed: ${error.message}`);
+        throw error;
+      }
+    },
+
+    leaveOrderFeedback: async (_, { id, rating, review }, { token, clients, logger }) => {
+      try {
+        await clients.marketplace.leaveOrderFeedback(token, id, { rating, review });
+        return true;
+      } catch (error) {
+        logger.warn(`leaveOrderFeedback failed: ${error.message}`);
         throw error;
       }
     },
@@ -1155,11 +1444,45 @@ export const resolvers = {
       }
     },
 
+    // ── Wallet mutations ──────────────────────────────────────────────────────
+
+    createTopupIntent: async (_, { amountPence }, { token, clients, logger }) => {
+      if (!token) throw new Error('Not authenticated');
+      try {
+        return await clients.payments.createTopupIntent(token, { amountPence });
+      } catch (error) {
+        logger.warn(`createTopupIntent failed: ${error.message}`);
+        throw error;
+      }
+    },
+
+    confirmTopup: async (_, { paymentIntentId }, { token, clients, logger }) => {
+      if (!token) throw new Error('Not authenticated');
+      try {
+        const result = await clients.payments.confirmTopup(token, paymentIntentId);
+        return result.wallet;
+      } catch (error) {
+        logger.warn(`confirmTopup failed: ${error.message}`);
+        throw error;
+      }
+    },
+
+    requestWithdrawal: async (_, { amountPence, sortCode, accountNumber, accountName }, { token, clients, logger }) => {
+      if (!token) throw new Error('Not authenticated');
+      try {
+        return await clients.payments.requestWithdrawal(token, { amountPence, sortCode, accountNumber, accountName });
+      } catch (error) {
+        logger.warn(`requestWithdrawal failed: ${error.message}`);
+        throw error;
+      }
+    },
+
     // ── Subscription mutations ────────────────────────────────────────────────
 
-    createSubscription: async (_, { planId, paymentMethodId }, { token, clients, logger }) => {
+    createSubscription: async (_, { planId }, { token, clients, logger }) => {
       try {
-        return await clients.payments.createSubscription(token, { planId, paymentMethodId });
+        // Returns { url, sessionId } — redirect user to url for Stripe Checkout
+        return await clients.payments.createSubscription(token, { planId });
       } catch (error) {
         logger.warn(`createSubscription failed: ${error.message}`);
         throw error;
@@ -1187,9 +1510,9 @@ export const resolvers = {
 
     // ── Trading mutations ─────────────────────────────────────────────────────
 
-    initiateTrade: async (_, { userId, offeredCards, wantedCards }, { token, clients, logger }) => {
+    initiateTrade: async (_, { userId, offeredCards, wantedCards, topUpAmount }, { token, clients, logger }) => {
       try {
-        return await clients.trading.initiateTrade(token, { userId, offeredCards: offeredCards ?? [], wantedCards: wantedCards ?? [] });
+        return await clients.trading.initiateTrade(token, { userId, offeredCards: offeredCards ?? [], wantedCards: wantedCards ?? [], topUpAmount: topUpAmount ?? null });
       } catch (error) {
         logger.warn(`initiateTrade failed: ${error.message}`);
         throw error;
@@ -1364,6 +1687,95 @@ export const resolvers = {
       }
     },
 
+    adminApproveProof: async (_, { id }, { token, clients, logger }) => {
+      try {
+        await clients.marketplace.adminApproveProof(token, id);
+        return true;
+      } catch (error) {
+        logger.warn(`adminApproveProof failed: ${error.message}`);
+        throw error;
+      }
+    },
+
+    adminRejectProof: async (_, { id, reason }, { token, clients, logger }) => {
+      try {
+        await clients.marketplace.adminRejectProof(token, id, reason);
+        return true;
+      } catch (error) {
+        logger.warn(`adminRejectProof failed: ${error.message}`);
+        throw error;
+      }
+    },
+
+    adminResolveDispute: async (_, { id, resolution, resolvedInFavourOf }, { token, clients, logger }) => {
+      try {
+        await clients.marketplace.adminResolveDispute(token, id, { resolution, resolvedInFavourOf });
+        return true;
+      } catch (error) {
+        logger.warn(`adminResolveDispute failed: ${error.message}`);
+        throw error;
+      }
+    },
+
+    adminCancelSubscription: async (_, { id }, { token, clients, logger }) => {
+      try {
+        await clients.payments.adminCancelSubscription(token, id);
+        return true;
+      } catch (error) {
+        logger.warn(`adminCancelSubscription failed: ${error.message}`);
+        throw error;
+      }
+    },
+
+    adminResumeSubscription: async (_, { id }, { token, clients, logger }) => {
+      try {
+        await clients.payments.adminResumeSubscription(token, id);
+        return true;
+      } catch (error) {
+        logger.warn(`adminResumeSubscription failed: ${error.message}`);
+        throw error;
+      }
+    },
+
+    adminChangePlan: async (_, { id, planId }, { token, clients, logger }) => {
+      try {
+        await clients.payments.adminChangePlan(token, id, planId);
+        return true;
+      } catch (error) {
+        logger.warn(`adminChangePlan failed: ${error.message}`);
+        throw error;
+      }
+    },
+
+    adminGrantSubscription: async (_, { userId, planId, periodDays }, { token, clients, logger }) => {
+      try {
+        await clients.payments.adminGrantSubscription(token, { userId, planId, periodDays });
+        return true;
+      } catch (error) {
+        logger.warn(`adminGrantSubscription failed: ${error.message}`);
+        throw error;
+      }
+    },
+
+    adminRevokeSubscription: async (_, { id }, { token, clients, logger }) => {
+      try {
+        await clients.payments.adminRevokeSubscription(token, id);
+        return true;
+      } catch (error) {
+        logger.warn(`adminRevokeSubscription failed: ${error.message}`);
+        throw error;
+      }
+    },
+
+    adminUpdatePlan: async (_, { id, input }, { token, clients, logger }) => {
+      try {
+        return await clients.payments.adminUpdatePlanDetails(token, id, input);
+      } catch (error) {
+        logger.warn(`adminUpdatePlan failed: ${error.message}`);
+        throw error;
+      }
+    },
+
     adminCreateProductListing: async (_, { input }, { token, clients, logger }) => {
       try {
         return await clients.marketplace.adminCreateProductListing(token, input);
@@ -1414,17 +1826,21 @@ export const resolvers = {
       catch (e) { logger.warn(`shareWishlistToDiscord: ${e.message}`); throw e; }
     },
 
-    createCartOrders: async (_, { items }, { token, clients, logger }) => {
+    createCartOrders: async (_, { items, walletAmountPence = 0 }, { token, clients, logger }) => {
       const orders = [];
       const errors = [];
+      let remainingWallet = Math.max(0, Math.round(Number(walletAmountPence) || 0));
+
       for (const item of items) {
         try {
           const order = await clients.marketplace.buyListing(token, item.listingId, {
-            buyerAddress: item.buyerAddress,
-            shippingRateId: item.shippingRateId,
-            shipmentId: item.shipmentId,
+            buyerAddress:      item.buyerAddress,
+            shippingRateId:    item.shippingRateId,
+            shipmentId:        item.shipmentId,
+            walletAmountPence: remainingWallet,
           });
           orders.push(order);
+          remainingWallet = Math.max(0, remainingWallet - (order.walletAmountPence || 0));
         } catch (err) {
           logger.warn(`createCartOrders: item ${item.listingId} failed: ${err.message}`);
           errors.push({ listingId: item.listingId, error: err.message });
@@ -1437,20 +1853,22 @@ export const resolvers = {
 
     updateSafetyProfile: async (_, { dob, parentEmail }, { token, clients, logger }) => {
       try {
-        return await clients.users.updateSafetyProfile(token, { dob, parentEmail });
+        const result = await clients.users.updateSafetyProfile(token, { dob, parentEmail });
+        // user-service returns the updated user/profile — wrap in envelope
+        return { ok: true, error: null, user: result };
       } catch (error) {
         logger.warn(`updateSafetyProfile failed: ${error.message}`);
-        throw error;
+        return { ok: false, error: error.message, user: null };
       }
     },
 
     requestParentVerification: async (_, __, { token, clients, logger }) => {
       try {
         const result = await clients.users.requestParentVerification(token);
-        return result?.ok ?? true;
+        return { ok: true, error: null, user: result?.user ?? result ?? null };
       } catch (error) {
         logger.warn(`requestParentVerification failed: ${error.message}`);
-        throw error;
+        return { ok: false, error: error.message, user: null };
       }
     },
 
@@ -1482,14 +1900,25 @@ export const resolvers = {
     },
 
     // ── Shipping mutations ────────────────────────────────────────────────────
-    // Shipping label generation is not yet available (provider not configured).
 
-    createShippingLabel: async () => {
-      throw new Error('Shipping label generation is not yet available.');
+    createShippingLabel: async (_, { to, from, parcel, parcelSize, shipmentId, rateId, relatedType, relatedId }, { token, clients, logger }) => {
+      try {
+        return await clients.shipping.createLabel(token, {
+          to, from, parcel, parcelSize, shipmentId, rateId, relatedType, relatedId,
+        });
+      } catch (error) {
+        logger.warn(`createShippingLabel failed: ${error.message}`);
+        throw error;
+      }
     },
 
-    cancelShippingLabel: async () => {
-      throw new Error('Shipping label generation is not yet available.');
+    cancelShippingLabel: async (_, { id }, { token, clients, logger }) => {
+      try {
+        return await clients.shipping.cancelLabel(token, id);
+      } catch (error) {
+        logger.warn(`cancelShippingLabel failed: ${error.message}`);
+        throw error;
+      }
     },
 
     // ── Push notifications ─────────────────────────────────────────────────────
@@ -1559,6 +1988,25 @@ export const resolvers = {
         return null;
       }
     },
+    cardInfo: async (obj, _, { clients, logger }) => {
+      if (!obj.cardId) return null;
+      try {
+        const card = await clients.catalog.getCard(obj.cardId);
+        if (!card) return null;
+        return {
+          id:         card.id         ?? null,
+          name:       card.name       ?? null,
+          number:     card.number     ?? null,
+          rarity:     card.rarity     ?? null,
+          setName:    card.set?.name  ?? null,
+          imageSmall: card.images?.small ?? null,
+          imageLarge: card.images?.large ?? null,
+        };
+      } catch (e) {
+        logger?.warn?.(`CardListing.cardInfo failed for ${obj.cardId}: ${e.message}`);
+        return null;
+      }
+    },
   },
 
   ProductListing: {
@@ -1573,6 +2021,68 @@ export const resolvers = {
     status:             (obj) => obj.paymentStatus ?? obj.status ?? null,
     paidAt:             (obj) => obj.paidAt ?? obj.capturedAt,
     shippingAddressJson:(obj) => obj.shippingAddressJson ?? obj.buyerAddressJson,
+    // DB column is stripeClientSecret; GQL schema exposes it as clientSecret
+    clientSecret:       (obj) => obj.clientSecret ?? obj.stripeClientSecret ?? null,
+
+    buyer: async (obj, _, { clients, logger }) => {
+      if (!obj.buyerId) return null;
+      try {
+        const profile = await clients.users.getProfileById(obj.buyerId);
+        if (!profile) return null;
+        const u = profile.user ?? {};
+        return { id: u.id ?? profile.userId ?? obj.buyerId, username: u.username ?? null, avatar: profile.avatar ?? u.avatar ?? null };
+      } catch (e) { logger?.warn?.(`Order.buyer failed: ${e.message}`); return null; }
+    },
+
+    seller: async (obj, _, { clients, logger }) => {
+      if (!obj.sellerId) return null;
+      try {
+        const profile = await clients.users.getProfileById(obj.sellerId);
+        if (!profile) return null;
+        const u = profile.user ?? {};
+        return { id: u.id ?? profile.userId ?? obj.sellerId, username: u.username ?? null, avatar: profile.avatar ?? u.avatar ?? null };
+      } catch (e) { logger?.warn?.(`Order.seller failed: ${e.message}`); return null; }
+    },
+
+    listing: async (obj, _, { clients, logger }) => {
+      if (!obj.listingId) return null;
+      try {
+        return await clients.marketplace.getListing(obj.listingId);
+      } catch (e) { logger?.warn?.(`Order.listing failed: ${e.message}`); return null; }
+    },
+  },
+
+  Offer: {
+    buyer: async (obj, _, { clients, logger }) => {
+      const id = obj.buyerId;
+      if (!id) return null;
+      try {
+        const profile = await clients.users.getProfileById(id);
+        if (!profile) return null;
+        const u = profile.user ?? {};
+        return {
+          id:       u.id       ?? profile.userId ?? id,
+          username: u.username ?? null,
+          avatar:   profile.avatar ?? u.avatar ?? null,
+        };
+      } catch (e) {
+        logger?.warn?.(`Offer.buyer failed for ${id}: ${e.message}`);
+        return null;
+      }
+    },
+
+    listing: async (obj, _, { clients, logger }) => {
+      const id = obj.listingId ?? obj.CardListing?.id;
+      if (!id) return obj.CardListing ?? null;
+      // If the marketplace-service already embedded the CardListing, use it
+      if (obj.CardListing) return obj.CardListing;
+      try {
+        return await clients.marketplace.getListing(id);
+      } catch (e) {
+        logger?.warn?.(`Offer.listing failed for ${id}: ${e.message}`);
+        return null;
+      }
+    },
   },
 
   ChatThread: {

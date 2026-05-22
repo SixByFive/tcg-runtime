@@ -72,6 +72,62 @@ router.post('/connect', requireAuth, async (req, res) => {
 });
 
 /**
+ * GET /seller/address
+ *
+ * Returns the seller's saved return address for shipping labels.
+ */
+router.get('/address', requireAuth, async (req, res) => {
+  try {
+    const profile = await SellerProfile.findByPk(req.user.sub, {
+      attributes: ['returnName', 'returnLine1', 'returnLine2', 'returnCity', 'returnPostcode', 'returnCountry', 'returnPhone', 'returnEmail'],
+    });
+    if (!profile) return res.json({});
+    res.json({
+      name:     profile.returnName,
+      line1:    profile.returnLine1,
+      line2:    profile.returnLine2,
+      city:     profile.returnCity,
+      postcode: profile.returnPostcode,
+      country:  profile.returnCountry ?? 'GB',
+      phone:    profile.returnPhone,
+      email:    profile.returnEmail,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * PUT /seller/address
+ *
+ * Save or update the seller's return address.
+ * Body: { name, line1, line2, city, postcode, country, phone, email }
+ */
+router.put('/address', requireAuth, async (req, res) => {
+  const { name, line1, line2, city, postcode, country, phone, email } = req.body;
+  if (!name || !line1 || !city || !postcode) {
+    return res.status(400).json({ error: 'name, line1, city, and postcode are required' });
+  }
+
+  try {
+    await SellerProfile.upsert({
+      userId:         req.user.sub,
+      returnName:     name,
+      returnLine1:    line1,
+      returnLine2:    line2 || null,
+      returnCity:     city,
+      returnPostcode: postcode,
+      returnCountry:  country || 'GB',
+      returnPhone:    phone || null,
+      returnEmail:    email || null,
+    });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
  * GET /seller/connect/refresh
  *
  * EasyPost redirect — user returned to our platform after completing

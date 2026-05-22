@@ -28,19 +28,35 @@ router.get('/', requireAuth, async (req, res) => {
 router.get('/admin/summary', requireAdmin, async (req, res) => {
   try {
     const { search, limit = 200 } = req.query;
-    // Raw query for cross-table group-by (User lives in auth-service's DB, same DB here)
-    const rows = await Collection.findAll({
-      attributes: [
-        'userId',
-        [fn('SUM', col('quantity')), 'totalCards'],
-        [fn('COUNT', fn('DISTINCT', col('cardId'))), 'distinctCards'],
-      ],
-      where: { wishlist: false },
-      group: ['userId'],
-      order: [['userId', 'ASC']],
-      limit: Number(limit),
-      raw: true,
-    });
+    const cap = Math.min(Number(limit) || 200, 500);
+
+    // JOIN users table (same DB) to get username + email alongside collection stats
+    const searchClause = search
+      ? `AND (u.username LIKE :search OR u.email LIKE :search)`
+      : '';
+
+    const [rows] = await sequelize.query(
+      `SELECT
+         c.\`userId\`,
+         u.username,
+         u.email,
+         CAST(SUM(c.quantity) AS SIGNED)          AS totalCards,
+         CAST(COUNT(DISTINCT c.\`cardId\`) AS SIGNED) AS distinctCards
+       FROM collections c
+       LEFT JOIN users u ON u.id = c.\`userId\`
+       WHERE (c.wishlist IS NOT TRUE)
+       ${searchClause}
+       GROUP BY c.\`userId\`, u.username, u.email
+       ORDER BY SUM(c.quantity) DESC
+       LIMIT :limit`,
+      {
+        replacements: {
+          limit: cap,
+          ...(search ? { search: `%${search}%` } : {}),
+        },
+      },
+    );
+
     res.json(rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -335,7 +351,7 @@ router.post('/move-from-wishlist', requireAuth, async (req, res) => {
         userId: req.user.sub,
         cardId,
         variation: normalizeVariation(variation),
-        wishlist: false,
+        wishlist: { [Op.or]: [false, null] },
       },
       transaction: t,
       lock: t.LOCK.UPDATE,

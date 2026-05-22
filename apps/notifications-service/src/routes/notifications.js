@@ -17,7 +17,10 @@ router.get('/', requireAuth, async (req, res) => {
     const page     = Math.max(1, Number(req.query.page) || 1);
     const pageSize = Math.min(100, Number(req.query.pageSize) || 20);
 
-    const where = { userId: req.user.sub, isSilent: false };
+    const where = {
+      [Op.or]: [{ userId: req.user.sub }, { isBroadcast: true, userId: null }],
+      isSilent: false,
+    };
     if (req.query.type)        where.type        = req.query.type;
     if (req.query.isRead)      where.isRead      = req.query.isRead === 'true';
     if (req.query.isDismissed) where.isDismissed = req.query.isDismissed === 'true';

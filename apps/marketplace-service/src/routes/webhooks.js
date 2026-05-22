@@ -81,6 +81,25 @@ router.post('/stripe', async (req, res) => {
 
         await order.update({ paymentStatus: 'cancelled' });
 
+        // Refund any wallet contribution the buyer already paid
+        if (order.walletAmountPence > 0) {
+          const paymentsUrl = process.env.PAYMENTS_SERVICE_URL || 'http://localhost:4019';
+          const key         = process.env.INTERNAL_API_KEY;
+          await fetch(`${paymentsUrl}/internal/wallet/refund-purchase`, {
+            method:  'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(key ? { 'x-internal-key': key } : {}),
+            },
+            body: JSON.stringify({
+              userId:      order.buyerId,
+              amountPence: order.walletAmountPence,
+              orderId:     order.id,
+              description: `Payment failed: order ${order.id.slice(0, 8)}`,
+            }),
+          }).catch((e) => logger.warn(`wallet refund on payment_failed: ${e.message}`));
+        }
+
         await notifyUser({
           userId:  order.buyerId,
           type:    NotificationType.WARNING,
@@ -99,6 +118,28 @@ router.post('/stripe', async (req, res) => {
         if (order && order.paymentStatus !== 'cancelled') {
           await order.update({ paymentStatus: 'cancelled' });
         }
+        break;
+      }
+
+      // Fired when a refund completes (dispute resolution in buyer's favour after capture).
+      case 'charge.refunded': {
+        const charge = event.data.object;
+        const order  = await Order.findOne({ where: { stripePaymentIntentId: charge.payment_intent } });
+        if (!order) break;
+
+        // Only update if not already marked refunded (inline dispute resolution may have done it)
+        if (order.paymentStatus !== 'refunded') {
+          await order.update({ paymentStatus: 'refunded' });
+        }
+
+        await notifyUser({
+          userId:  order.buyerId,
+          type:    NotificationType.INFO,
+          title:   'Refund processed',
+          body:    'Your refund has been processed and will appear in your account within a few days.',
+          linkUrl: `/orders/${order.id}`,
+          meta:    { orderId: order.id },
+        }).catch(() => {});
         break;
       }
 

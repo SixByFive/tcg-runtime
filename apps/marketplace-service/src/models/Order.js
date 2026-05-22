@@ -34,6 +34,10 @@ export default function defineOrder(sequelize) {
     trackingNumber:   { type: DataTypes.STRING, allowNull: true },
     trackingCarrier:  { type: DataTypes.STRING, allowNull: true },
     shippingLabelUrl: { type: DataTypes.STRING, allowNull: true },
+    shippingLabelId:  { type: DataTypes.UUID,   allowNull: true },
+
+    // Wallet contribution (pence)
+    walletAmountPence: { type: DataTypes.INTEGER, defaultValue: 0 },
 
     // Addresses (JSON snapshots at time of purchase)
     buyerAddressJson:  { type: DataTypes.JSON, allowNull: true },

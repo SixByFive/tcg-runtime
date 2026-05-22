@@ -1,9 +1,65 @@
 import { Op } from 'sequelize';
 import { createLogger } from '@sbf/logger';
-import { Notification, UserNotificationPref } from '../models/index.js';
+import { Notification, UserNotificationPref, PushToken } from '../models/index.js';
 import { sendNotificationEmail } from './email.service.js';
 
 const logger = createLogger('notifications-service:notify');
+
+const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
+
+/**
+ * Send Expo push notifications to all active tokens for a user.
+ * Fire-and-forget — errors are logged but never thrown.
+ */
+async function sendExpoPush(userId, { title, body, linkUrl, type }) {
+  try {
+    const tokens = await PushToken.findAll({
+      where: { userId, isActive: true },
+      attributes: ['token'],
+      limit: 25,
+    });
+    if (!tokens.length) return;
+
+    const messages = tokens.map(({ token }) => ({
+      to:    token,
+      title,
+      body,
+      data:  { linkUrl: linkUrl ?? null, type: type ?? null },
+      sound: 'default',
+    }));
+
+    const res = await fetch(EXPO_PUSH_URL, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body:    JSON.stringify(messages),
+    });
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      logger.warn({ msg: 'expo_push_http_error', userId, status: res.status, body: text });
+      return;
+    }
+
+    // Handle Expo receipt errors (invalid/expired tokens)
+    const { data: receipts = [] } = await res.json().catch(() => ({ data: [] }));
+    const badTokens = [];
+    receipts.forEach((r, i) => {
+      if (r.status === 'error') {
+        logger.warn({ msg: 'expo_push_receipt_error', userId, details: r.details });
+        if (r.details?.error === 'DeviceNotRegistered') {
+          badTokens.push(tokens[i].token);
+        }
+      }
+    });
+
+    if (badTokens.length) {
+      await PushToken.update({ isActive: false }, { where: { token: badTokens } });
+      logger.info({ msg: 'expo_push_tokens_deactivated', userId, count: badTokens.length });
+    }
+  } catch (err) {
+    logger.error({ msg: 'expo_push_failed', userId, error: err.message });
+  }
+}
 
 // ─── Quiet hours ─────────────────────────────────────────────────────────────
 
@@ -90,6 +146,12 @@ export async function notifyUser({
       }
     }
 
+    // Expo push (fire-and-forget, respects pushEnabled pref + quiet hours + silent flag)
+    const pushOk = userId && !isSilent && !quiet && (!prefs || prefs.pushEnabled !== false);
+    if (pushOk) {
+      sendExpoPush(userId, { title, body, linkUrl, type });
+    }
+
     return notification;
   } catch (err) {
     logger.error({ msg: 'notify_failed', userId, type, error: err.message });
@@ -101,12 +163,17 @@ export async function notifyUser({
 
 export async function getUnreadCount(userId) {
   return Notification.count({
-    where: { userId, isRead: false, isDismissed: false, isSilent: false },
+    where: {
+      [Op.or]: [{ userId }, { isBroadcast: true, userId: null }],
+      isRead: false, isDismissed: false, isSilent: false,
+    },
   });
 }
 
 export async function markAsRead(id, userId) {
-  const n = await Notification.findOne({ where: { id, userId } });
+  const n = await Notification.findOne({
+    where: { id, [Op.or]: [{ userId }, { isBroadcast: true, userId: null }] },
+  });
   if (!n) return false;
   await n.update({ isRead: true });
   return true;
@@ -115,7 +182,12 @@ export async function markAsRead(id, userId) {
 export async function markAllAsRead(userId) {
   await Notification.update(
     { isRead: true },
-    { where: { userId, isRead: false, isSilent: false } },
+    {
+      where: {
+        [Op.or]: [{ userId }, { isBroadcast: true, userId: null }],
+        isRead: false, isSilent: false,
+      },
+    },
   );
 }
 

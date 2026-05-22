@@ -265,6 +265,28 @@ export async function createApp({ logger }) {
     }
   });
 
+  // ── Discord share proxy ───────────────────────────────────────────────────
+  // Forwards /discord/share/* → user-service /discord/share/*
+  const USER_URL = process.env.USER_SERVICE_URL || 'http://localhost:4021';
+  app.use('/discord/share', async (req, res) => {
+    const target = `${USER_URL}/discord/share${req.url}`;
+    try {
+      const upstream = await fetch(target, {
+        method: req.method,
+        headers: {
+          'content-type': req.headers['content-type'] || 'application/json',
+          ...(req.headers.authorization ? { authorization: req.headers.authorization } : {}),
+        },
+        body: ['GET', 'HEAD'].includes(req.method) ? undefined : JSON.stringify(req.body),
+      });
+      const json = await upstream.json().catch(() => null);
+      res.status(upstream.status).json(json ?? {});
+    } catch (err) {
+      logger.warn(`discord-share proxy error: ${err.message}`);
+      res.status(502).json({ error: 'user-service unavailable' });
+    }
+  });
+
   const apolloServer = new ApolloServer({
     typeDefs,
     resolvers,

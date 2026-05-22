@@ -63,6 +63,16 @@ export default function defineShippingLabel(sequelize) {
       type: DataTypes.UUID,
       allowNull: true,
     },
+    // ── Tracking ──────────────────────────────────────────────────────────────
+    // Normalised status: booked | collected | in_transit | out_for_delivery |
+    //                    delivered | failed_delivery | returned
+    trackingStatus: {
+      type: DataTypes.STRING(32),
+      allowNull: true,
+      defaultValue: 'booked',
+    },
+    deliveredAt:   { type: DataTypes.DATE, allowNull: true },
+    lastTrackedAt: { type: DataTypes.DATE, allowNull: true },
     meta: {
       type: DataTypes.JSON,
       allowNull: true,

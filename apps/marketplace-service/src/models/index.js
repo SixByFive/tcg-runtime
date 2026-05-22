@@ -8,9 +8,11 @@ import defineOwnershipRecord from './OwnershipRecord.js';
 import defineUserReputation  from './UserReputation.js';
 import defineProductListing  from './ProductListing.js';
 import defineInventoryItem   from './InventoryItem.js';
+import defineMarketplaceAgreement from './MarketplaceAgreement.js';
 
 export let CardListing, Offer, Order, OrderDispute, SellerProfile, OwnershipRecord, UserReputation;
 export let ProductListing, InventoryItem;
+export let MarketplaceAgreement;
 export let sequelize;
 
 let initialized = false;
@@ -19,15 +21,16 @@ export async function initModels() {
   if (initialized) return;
   sequelize = getSequelize();
 
-  CardListing     = defineCardListing(sequelize);
-  Offer           = defineOffer(sequelize);
-  Order           = defineOrder(sequelize);
-  OrderDispute    = defineOrderDispute(sequelize);
-  SellerProfile   = defineSellerProfile(sequelize);
-  OwnershipRecord = defineOwnershipRecord(sequelize); // cross-service, no sync
-  UserReputation  = defineUserReputation(sequelize);  // cross-service, no sync
-  ProductListing  = defineProductListing(sequelize);
-  InventoryItem   = defineInventoryItem(sequelize);
+  CardListing          = defineCardListing(sequelize);
+  Offer                = defineOffer(sequelize);
+  Order                = defineOrder(sequelize);
+  OrderDispute         = defineOrderDispute(sequelize);
+  SellerProfile        = defineSellerProfile(sequelize);
+  OwnershipRecord      = defineOwnershipRecord(sequelize); // cross-service, no sync
+  UserReputation       = defineUserReputation(sequelize);  // cross-service, no sync
+  ProductListing       = defineProductListing(sequelize);
+  InventoryItem        = defineInventoryItem(sequelize);
+  MarketplaceAgreement = defineMarketplaceAgreement(sequelize);
 
   // Associations
   CardListing.hasMany(Offer,  { foreignKey: 'listingId', as: 'offers' });
@@ -49,6 +52,7 @@ export async function initModels() {
   await SellerProfile.sync(syncOpts);
   await ProductListing.sync(syncOpts);
   await InventoryItem.sync(syncOpts);
+  await MarketplaceAgreement.sync(syncOpts);
   // OwnershipRecord and UserReputation: cross-service, no sync
 
   initialized = true;

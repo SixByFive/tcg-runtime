@@ -88,6 +88,71 @@ router.get('/browse', async (req, res) => {
   }
 });
 
+// ── Admin routes ──────────────────────────────────────────────────────────────
+// Must be defined BEFORE /:idOrSlug to prevent "admin" being treated as a slug.
+
+// GET /binder/admin — list all binders (admin)
+// ?showDeleted=true to include soft-deleted binders
+router.get('/admin', requireAdmin, async (req, res) => {
+  try {
+    const limit       = Math.min(Number(req.query.limit) || 200, 500);
+    const offset      = Number(req.query.offset) || 0;
+    const showDeleted = req.query.showDeleted === 'true';
+    const where       = showDeleted ? {} : { isDeleted: false };
+    const binders = await Binder.findAll({
+      where,
+      attributes: ['id', 'userId', 'name', 'visibility', 'isDeleted', 'createdAt'],
+      order: [['createdAt', 'DESC']],
+      limit,
+      offset,
+    });
+    res.json(binders);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PATCH /binder/admin/:id
+router.patch('/admin/:id', requireAdmin, async (req, res) => {
+  try {
+    const binder = await Binder.findByPk(req.params.id);
+    if (!binder) return res.status(404).json({ error: 'Not found' });
+
+    const { name, description, coverColor, accentColor, visibility } = req.body;
+    if (name !== undefined) binder.name = name;
+    if (description !== undefined) binder.description = description;
+    if (coverColor !== undefined) binder.coverColor = coverColor;
+    if (accentColor !== undefined) binder.accentColor = accentColor;
+    if (visibility !== undefined) binder.visibility = visibility;
+
+    await binder.save();
+    res.json(binder);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /binder/admin/:id
+router.delete('/admin/:id', requireAdmin, async (req, res) => {
+  try {
+    const binder = await Binder.findByPk(req.params.id);
+    if (!binder) return res.status(404).json({ error: 'Not found' });
+
+    if (req.query.permanent === 'true') {
+      await binder.destroy();
+    } else {
+      binder.isDeleted = true;
+      await binder.save();
+    }
+
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Single binder ─────────────────────────────────────────────────────────────
+
 // GET /binder/:idOrSlug — single binder with full pages + slots
 router.get('/:idOrSlug', async (req, res) => {
   try {
@@ -467,64 +532,6 @@ router.put('/:id/pages', requireAuth, async (req, res) => {
     // Return the fresh binder
     const result = await Binder.findByPk(binder.id, { include: fullBinderInclude() });
     res.json(result);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ── Admin routes ──────────────────────────────────────────────────────────────
-
-// GET /binder/admin — list all binders (admin)
-router.get('/admin', requireAdmin, async (req, res) => {
-  try {
-    const limit  = Math.min(Number(req.query.limit) || 200, 500);
-    const offset = Number(req.query.offset) || 0;
-    const binders = await Binder.findAll({
-      attributes: ['id', 'userId', 'name', 'visibility', 'isDeleted', 'createdAt'],
-      order: [['createdAt', 'DESC']],
-      limit,
-      offset,
-    });
-    res.json(binders);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// PATCH /binder/admin/:id
-router.patch('/admin/:id', requireAdmin, async (req, res) => {
-  try {
-    const binder = await Binder.findByPk(req.params.id);
-    if (!binder) return res.status(404).json({ error: 'Not found' });
-
-    const { name, description, coverColor, accentColor, visibility } = req.body;
-    if (name !== undefined) binder.name = name;
-    if (description !== undefined) binder.description = description;
-    if (coverColor !== undefined) binder.coverColor = coverColor;
-    if (accentColor !== undefined) binder.accentColor = accentColor;
-    if (visibility !== undefined) binder.visibility = visibility;
-
-    await binder.save();
-    res.json(binder);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// DELETE /binder/admin/:id
-router.delete('/admin/:id', requireAdmin, async (req, res) => {
-  try {
-    const binder = await Binder.findByPk(req.params.id);
-    if (!binder) return res.status(404).json({ error: 'Not found' });
-
-    if (req.query.permanent === 'true') {
-      await binder.destroy();
-    } else {
-      binder.isDeleted = true;
-      await binder.save();
-    }
-
-    res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

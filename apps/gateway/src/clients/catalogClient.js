@@ -74,7 +74,7 @@ function normaliseCard(c) {
           }
         : null,
     set: c.Set
-      ? { code: c.Set.code, name: c.Set.name }
+      ? { code: c.Set.code, name: c.Set.name, releaseDate: c.Set.release_date ?? null }
       : null,
     variants: (() => {
       const vArr = Array.isArray(c.variants) && c.variants.length
@@ -144,7 +144,8 @@ export async function getCardsBatch(ids) {
 
 export async function getCard(id, variant) {
   const params = variant ? `?variant=${encodeURIComponent(variant)}` : '';
-  return request(`/cards/${encodeURIComponent(id)}${params}`, { method: 'GET' });
+  const raw = await request(`/cards/${encodeURIComponent(id)}${params}`, { method: 'GET' });
+  return raw ? normaliseCard(raw) : null;
 }
 
 // ─── Prices ───────────────────────────────────────────────────────────────────

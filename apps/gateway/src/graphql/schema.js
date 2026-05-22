@@ -40,7 +40,7 @@ export const typeDefs = gql`
     searchCards(input: CardSearchInput!): CardSearchResult!
     cardsearchCard(id: ID!, variant: String): CardsearchDetail
     cardsearchPriceObservations(cardId: ID!, variant: String, limit: Int): [PriceObservation!]!
-    cardsearchPriceRollups(cardId: ID!, variant: String): [PriceRollup!]!
+    cardsearchPriceRollups(cardId: ID!, variant: String, windows: [Int]): [PriceRollup!]!
 
     # ── Notifications ────────────────────────────────────────────────────────────
     myNotifications(page: Int, pageSize: Int, filter: NotificationFilterInput): NotificationPage!
@@ -56,18 +56,23 @@ export const typeDefs = gql`
     unreadMessageCount: Int!
     hasAgreedToChatRules: Boolean!
     chatRulesText: String!
+    hasAgreedToMarketplaceRules: Boolean!
+    marketplaceRules: [String!]!
     myMutedConversations: [ChatMute!]!
     myBlockedUsers: [ChatBlock!]!
     adminQueryReportedUsers(page: Int, pageSize: Int, isCleared: Boolean): [ReportedUser!]!
 
     # ── Marketplace ───────────────────────────────────────────────────────────────
-    listings(type: ListingType, cardId: String, sellerId: ID, condition: String, status: ListingStatus, minPrice: Float, maxPrice: Float, limit: Int, offset: Int): [ListingBase!]!
+    listings(type: ListingType, cardId: String, sellerId: ID, condition: String, variation: String, sort: String, status: ListingStatus, minPrice: Float, maxPrice: Float, limit: Int, offset: Int): [ListingBase!]!
     listing(id: ID!): ListingBase
-    myOrders(role: String, limit: Int, offset: Int): [Order!]!
+    myListings(status: ListingStatus, limit: Int, offset: Int): [CardListing!]!
+    myOrders(role: String, fulfilmentStatus: String, limit: Int, offset: Int): [Order!]!
     order(id: ID!): Order
     sellerStatus: SellerStatus!
+    sellerAddress: SellerAddress!
     listingOffers(listingId: ID!): [Offer!]!
     myOffers: [Offer!]!
+    myIncomingOffers: [Offer!]!
 
     # ── Trading ───────────────────────────────────────────────────────────────────
     browseTrades(page: Int, pageSize: Int): [Trade!]!
@@ -81,6 +86,9 @@ export const typeDefs = gql`
     subscriptionPortal: SubscriptionPortal
     myTransactions(page: Int, pageSize: Int): [PaymentTransaction!]!
 
+    # ── Wallet ────────────────────────────────────────────────────────────────────
+    myWallet(limit: Int, offset: Int): Wallet!
+
     # ── Trading Admin ──────────────────────────────────────────────────────────────
     adminTrades(page: Int, pageSize: Int, status: TradeStatus, userId: ID): [Trade!]!
     adminTradeDisputes(status: String): [TradeDispute!]!
@@ -89,6 +97,15 @@ export const typeDefs = gql`
     # ── Marketplace Admin ─────────────────────────────────────────────────────────
     adminListings(status: String, sellerId: ID, limit: Int, offset: Int): [CardListing!]!
     adminOrders(paymentStatus: String, fulfilmentStatus: String, limit: Int, offset: Int): [Order!]!
+    adminProofQueue: [CardListing!]!
+    adminOrderDisputes(status: String): [OrderDispute!]!
+
+    # ── Subscription / Revenue Admin ──────────────────────────────────────────────
+    adminSubscriptions(status: String, page: Int, pageSize: Int): AdminSubscriptionPage!
+    adminAllTransactions(page: Int, pageSize: Int, type: String, status: String): AdminTransactionPage!
+    adminRevenueSummary: AdminRevenueSummary!
+    adminMarketplaceRevenue: AdminMarketplaceRevenue!
+    adminPlans: [SubscriptionPlan!]!
 
     # ── Safety ────────────────────────────────────────────────────────────────────
     mySafetyProfile: SafetyProfile!
@@ -96,6 +113,8 @@ export const typeDefs = gql`
     # ── Shipping ──────────────────────────────────────────────────────────────────
     shippingRates(to: JSON!, from: JSON!, parcel: JSON!, parcelSize: String): [ShippingRate!]!
     shippingLabel(id: ID!): ShippingLabel
+    shippingLabelTracking(id: ID!): ShippingLabelTracking!
+    orderTracking(orderId: ID!): ShippingLabelTracking
 
     # ── Rewards ───────────────────────────────────────────────────────────────────
     myRewards: [Reward!]!
@@ -186,6 +205,7 @@ export const typeDefs = gql`
     reportUser(userId: ID!, reason: String!, details: String): Boolean
     reportMessage(messageId: ID!, reason: String!, details: String): Boolean
     agreeToChatRules: Boolean!
+    agreeToMarketplaceRules: Boolean!
     muteConversation(userId: ID!, mutedUntil: String): Boolean!
     unmuteConversation(userId: ID!): Boolean!
     blockUserFromChat(userId: ID!, reason: String): Boolean!
@@ -201,12 +221,27 @@ export const typeDefs = gql`
     togglePriceAlert(id: ID!, active: Boolean!): Boolean!
 
     # ── Subscriptions / Payments ─────────────────────────────────────────────────
-    createSubscription(planId: ID!, paymentMethodId: String): UserSubscription!
+    createSubscription(planId: ID!): SubscriptionCheckoutResult!
     cancelSubscription: Boolean!
     resumeSubscription: UserSubscription!
 
+    # ── Wallet ────────────────────────────────────────────────────────────────────
+    """
+    Creates a Stripe PaymentIntent for a wallet top-up.
+    Returns a clientSecret — pass it to Stripe.js to complete the payment.
+    amountPence must be an integer (e.g. 1000 = £10). Min £5, max £200.
+    """
+    createTopupIntent(amountPence: Int!): TopupIntent!
+    confirmTopup(paymentIntentId: String!): Wallet!
+    """
+    Request a wallet withdrawal. Debits the balance immediately and queues
+    a pending bank transfer (processed within 1–3 business days).
+    amountPence must be a positive integer. Minimum £10 (1000p).
+    """
+    requestWithdrawal(amountPence: Int!, sortCode: String!, accountNumber: String!, accountName: String): WithdrawalRequest!
+
     # ── Trading ───────────────────────────────────────────────────────────────────
-    initiateTrade(userId: ID!, offeredCards: [TradeCardInput!], wantedCards: [TradeCardInput!]): Trade!
+    initiateTrade(userId: ID!, offeredCards: [TradeCardInput!], wantedCards: [TradeCardInput!], topUpAmount: Float): Trade!
     respondToTrade(id: ID!, accept: Boolean!, counterCards: [TradeCardInput!], reason: String): Trade!
     cancelTrade(id: ID!, reason: String): Trade!
     uploadTradeProof(id: ID!, proofImage: String!, proofCode: String): TradeProofResult!
@@ -225,9 +260,18 @@ export const typeDefs = gql`
 
     # ── Marketplace ───────────────────────────────────────────────────────────────
     createListing(input: CreateListingInput!): CardListing!
+    updateListing(id: ID!, input: UpdateListingInput!): CardListing!
     deleteListing(id: ID!): Boolean!
+    submitListingProof(id: ID!, image: String!): SubmitProofResult!
     createOrderFromListing(input: CreateOrderFromListingInput!): Order!
+    submitOrderTracking(id: ID!, trackingNumber: String!, carrier: String): Order!
+    shipOrder(id: ID!): ShipOrderResult!
+    confirmOrderReceived(id: ID!): Order!
+    raiseOrderDispute(id: ID!, reason: String!): Order!
+    cancelOrder(id: ID!, reason: String): Order!
+    leaveOrderFeedback(id: ID!, rating: Int!, review: String): Boolean!
     connectStripe: StripeConnectResult!
+    updateSellerAddress(input: SellerAddressInput!): Boolean!
     createOffer(listingId: ID!, amount: Float!, message: String): Offer!
     respondToOffer(offerId: ID!, action: String!, counterAmount: Float, counterMessage: String, buyerAddress: JSON): RespondToOfferResult!
     withdrawOffer(offerId: ID!): Boolean!
@@ -236,7 +280,8 @@ export const typeDefs = gql`
     adminGrantAchievement(userId: ID!, achievementId: ID!, data: JSON): UserAchievement!
     shareCollectionToDiscord(guildId: String!, channelId: String!, cardId: String!, cardName: String!, variation: String, quantity: Int, imageUrl: String): Boolean!
     shareWishlistToDiscord(guildId: String!, channelId: String!, cardId: String!, cardName: String!, variation: String, imageUrl: String): Boolean!
-    createCartOrders(items: [CartItemInput!]!): CartOrderResult!
+    createCartOrders(items: [CartItemInput!]!, walletAmountPence: Int): CartOrderResult!
+    applyWalletToOrder(orderId: ID!, walletAmountPence: Int!): ApplyWalletResult!
 
     # ── Admin ─────────────────────────────────────────────────────────────────────
     adminBanUser(id: ID!): Boolean!
@@ -246,14 +291,23 @@ export const typeDefs = gql`
     adminSendBroadcastNotification(input: BroadcastNotificationInput!): Boolean!
     adminDeleteNotification(id: ID!): Boolean!
     adminUpdateOrderFulfilmentStatus(orderId: ID!, status: String!): Order!
+    adminApproveProof(id: ID!): Boolean!
+    adminRejectProof(id: ID!, reason: String): Boolean!
+    adminResolveDispute(id: ID!, resolution: String!, resolvedInFavourOf: String!): Boolean!
+    adminCancelSubscription(id: ID!): Boolean!
+    adminResumeSubscription(id: ID!): Boolean!
+    adminChangePlan(id: ID!, planId: ID!): Boolean!
+    adminGrantSubscription(userId: ID!, planId: ID!, periodDays: Int): Boolean!
+    adminRevokeSubscription(id: ID!): Boolean!
+    adminUpdatePlan(id: ID!, input: PlanInput!): SubscriptionPlan!
     adminCreateProductListing(input: ProductListingInput!): ProductListing!
     adminUpdateProductListing(id: ID!, input: ProductListingInput!): ProductListing!
     adminSendSystemMessage(receiverId: ID!, content: String!, meta: JSON): Message!
     grantReward(userId: ID!, type: String!, achievementId: ID, data: JSON): Reward!
 
     # ── Safety ────────────────────────────────────────────────────────────────────
-    updateSafetyProfile(dob: String, parentEmail: String): SafetyProfile!
-    requestParentVerification: Boolean!
+    updateSafetyProfile(dob: String, parentEmail: String): SafetyProfileResult!
+    requestParentVerification: SafetyProfileResult!
     adminSetUserRestriction(userId: ID!, restrictionLevel: String): SafetyProfile!
     adminSetParentVerified(userId: ID!, verified: Boolean!): SafetyProfile!
     adminClearParentLink(userId: ID!): Boolean!
@@ -330,6 +384,12 @@ export const typeDefs = gql`
     oauthId: String
     discordId: String
     discordUsername: String
+
+    # Safety / parental controls
+    dob: String
+    parentEmail: String
+    parentVerifiedAt: String
+    capabilities: Capabilities
 
     # Timestamps
     lastLogin: String
@@ -425,6 +485,7 @@ export const typeDefs = gql`
   type CardSetRef {
     code: String
     name: String
+    releaseDate: String
   }
 
   type CardVariant {
@@ -501,14 +562,18 @@ export const typeDefs = gql`
     avg: Float
     change: Float
     changePct: Float
+    min: Float
+    max: Float
   }
 
   type PriceLatest {
     date: String
     market: Float
+    mid: Float
   }
 
   type PriceRollup {
+    variant: String
     currency: String
     latest: PriceLatest
     d7: PricePeriodStats
@@ -644,6 +709,17 @@ export const typeDefs = gql`
     REMOVED
   }
 
+  """Minimal card data enriched from the catalog service onto a CardListing."""
+  type CardInfo {
+    id: String
+    name: String
+    number: String
+    rarity: String
+    setName: String
+    imageSmall: String
+    imageLarge: String
+  }
+
   type CardListing implements ListingBase {
     id: ID!
     type: String
@@ -662,11 +738,16 @@ export const typeDefs = gql`
     shippingType: String
     shippingPrice: Float
     parcelSize: String
+    labelPaidBy: String
     allowOffers: Boolean
     offerMinPrice: Float
+    willTrade: Boolean
     proofCode: String
+    moderationResult: String
+    proofImagePath: String
     createdAt: String
     updatedAt: String
+    cardInfo: CardInfo
   }
 
   type Order {
@@ -686,6 +767,8 @@ export const typeDefs = gql`
     listing: ListingBase
     # Stripe client secret — present immediately after createOrderFromListing
     clientSecret: String
+    # Wallet contribution in pence
+    walletAmountPence: Int
     # Raw model fields
     listingId: ID
     buyerId: ID
@@ -703,9 +786,25 @@ export const typeDefs = gql`
     trackingCarrier: String
     shippingLabelUrl: String
     buyerAddressJson: JSON
+    metadataJson: JSON
     shippedAt: String
     completedAt: String
     cancelledAt: String
+    createdAt: String
+    updatedAt: String
+    dispute: OrderDispute
+  }
+
+  type OrderDispute {
+    id: ID!
+    orderId: ID
+    raisedBy: ID
+    reason: String
+    status: String
+    resolution: String
+    resolvedInFavourOf: String
+    escrowActionTaken: String
+    resolvedAt: String
     createdAt: String
     updatedAt: String
   }
@@ -716,10 +815,56 @@ export const typeDefs = gql`
     url: String
   }
 
+  type SellerAddress {
+    name: String
+    line1: String
+    line2: String
+    city: String
+    postcode: String
+    country: String
+    phone: String
+    email: String
+  }
+
+  input SellerAddressInput {
+    name: String!
+    line1: String!
+    line2: String
+    city: String!
+    postcode: String!
+    country: String
+    phone: String
+    email: String
+  }
+
+  type ApplyWalletResult {
+    ok: Boolean!
+    clientSecret: String
+    walletAmountPence: Int!
+    cardTotal: Float!
+  }
+
+  type ShipOrderResult {
+    ok: Boolean!
+    trackingNumber: String
+    trackingUrl: String
+    labelUrl: String
+    labelBase64: String
+    carrier: String
+    service: String
+    labelCost: Float
+  }
+
   type StripeConnectResult {
     accountId: String
     url: String
     alreadyConnected: Boolean
+  }
+
+  type SubmitProofResult {
+    ok: Boolean!
+    result: String!
+    newProofCode: String
   }
 
   type Offer {
@@ -734,6 +879,7 @@ export const typeDefs = gql`
     counterAmount: Float
     counterMessage: String
     listing: CardListing
+    buyer: PublicUser
     createdAt: String
     updatedAt: String
   }
@@ -809,8 +955,26 @@ export const typeDefs = gql`
     shippingType: String
     shippingPrice: Float
     parcelSize: String
+    labelPaidBy: String
     allowOffers: Boolean
     offerMinPrice: Float
+    willTrade: Boolean
+  }
+
+  input UpdateListingInput {
+    title: String
+    description: String
+    price: Float
+    quantity: Int
+    condition: String
+    variant: String
+    shippingType: String
+    shippingPrice: Float
+    parcelSize: String
+    labelPaidBy: String
+    allowOffers: Boolean
+    offerMinPrice: Float
+    willTrade: Boolean
   }
 
   input CreateOrderFromListingInput {
@@ -1027,6 +1191,116 @@ export const typeDefs = gql`
     url: String!
   }
 
+  """Returned by createSubscription — redirect the user to url to complete payment."""
+  type SubscriptionCheckoutResult {
+    url: String!
+    sessionId: String!
+  }
+
+  type AdminSubscriptionPage {
+    subscriptions: [UserSubscription!]!
+    total: Int!
+    page: Int!
+    pageSize: Int!
+  }
+
+  type AdminTransactionPage {
+    transactions: [PaymentTransaction!]!
+    total: Int!
+    page: Int!
+    pageSize: Int!
+  }
+
+  type AdminRevenueSummary {
+    totalRevenue: Float!
+    revenue30d: Float!
+    revenue7d: Float!
+    subRevenue: Float!
+    productRevenue: Float!
+    refunds: Float!
+    currency: String!
+  }
+
+  type AdminMarketplaceRevenueMonth {
+    month: String!
+    gmv: Float!
+    fees: Float!
+    orders: Int!
+  }
+
+  type AdminMarketplaceRevenue {
+    gmv: Float!
+    platformFees: Float!
+    shippingCollected: Float!
+    walletUsed: Float!
+    refundedTotal: Float!
+    stripeFeeEstimate: Float!
+    gmv30d: Float!
+    gmv7d: Float!
+    platformFees30d: Float!
+    totalOrders: Int!
+    completedOrders: Int!
+    openDisputes: Int!
+    resolvedDisputes: Int!
+    monthly: [AdminMarketplaceRevenueMonth!]!
+    currency: String!
+  }
+
+  input PlanInput {
+    name: String
+    description: String
+    price: Float
+    interval: String
+    platformFeePercent: Float
+    feeDiscount: Int
+    maxBinders: Int
+    maxActiveListings: Int
+    maxActiveTrades: Int
+    active: Boolean
+    sortOrder: Int
+  }
+
+  # ── Wallet ────────────────────────────────────────────────────────────────────
+
+  type WalletTx {
+    id: ID!
+    type: String!
+    amountPence: Int!
+    amount: Float!
+    currency: String!
+    status: String!
+    description: String
+    relatedTradeId: ID
+    stripePaymentIntentId: String
+    createdAt: String
+  }
+
+  type Wallet {
+    balancePence: Int!
+    balance: Float!
+    heldPence: Int!
+    held: Float!
+    currency: String!
+    transactions: [WalletTx!]!
+    total: Int!
+  }
+
+  """Returned by createTopupIntent — pass clientSecret to Stripe.js to confirm payment."""
+  type TopupIntent {
+    clientSecret: String!
+    paymentIntentId: String!
+  }
+
+  """Returned by requestWithdrawal — the pending withdrawal transaction."""
+  type WithdrawalRequest {
+    id: ID!
+    amountPence: Int!
+    amount: Float!
+    status: String!
+    description: String
+    createdAt: String
+  }
+
   type PaymentTransaction {
     id: ID!
     userId: ID
@@ -1103,6 +1377,8 @@ export const typeDefs = gql`
     cancelledReason: String
     disputeId: ID
     adminNotes: String
+    topUpAmount: Float
+    topUpPaidBy: ID
     proofAVerified: Boolean
     proofBVerified: Boolean
     trackingNumberA: String
@@ -1147,6 +1423,10 @@ export const typeDefs = gql`
     canConnectDiscord: Boolean
     canBuyMarketplace: Boolean
     canSellMarketplace: Boolean
+    canUseCollection: Boolean
+    canShareToDiscord: Boolean
+    isMinor: Boolean
+    requiresParentApproval: Boolean
     restrictionLevel: String
   }
 
@@ -1158,6 +1438,21 @@ export const typeDefs = gql`
     capabilities: Capabilities
   }
 
+  # Returned by updateSafetyProfile and requestParentVerification mutations
+  type SafetyResultUser {
+    id: ID
+    dob: String
+    parentEmail: String
+    parentVerifiedAt: String
+    capabilities: Capabilities
+  }
+
+  type SafetyProfileResult {
+    ok: Boolean!
+    error: String
+    user: SafetyResultUser
+  }
+
   # ── Shipping ──────────────────────────────────────────────────────────────────
 
   type ShippingRate {
@@ -1165,7 +1460,10 @@ export const typeDefs = gql`
     shipmentId: String
     carrier: String
     service: String
+    collectionType: String
     estimatedDays: Int
+    estimatedDate: String
+    cutOff: String
     amount: Float
     currency: String
     trackingAvailable: Boolean
@@ -1180,10 +1478,29 @@ export const typeDefs = gql`
     labelUrl: String
     qrCodeUrl: String
     status: String
+    trackingStatus: String
     amount: Float
     currency: String
     refundStatus: String
+    deliveredAt: String
+    lastTrackedAt: String
     createdAt: String
+  }
+
+  type TrackingEvent {
+    description: String!
+    dateTime: String
+    status: String
+  }
+
+  type ShippingLabelTracking {
+    labelId: ID!
+    trackingNumber: String
+    trackingUrl: String
+    # Normalised status: booked | collected | in_transit | out_for_delivery |
+    #                    delivered | failed_delivery | returned
+    status: String!
+    events: [TrackingEvent!]!
   }
 
   # ── Rewards ───────────────────────────────────────────────────────────────────

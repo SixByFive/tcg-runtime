@@ -148,12 +148,168 @@ router.get('/admin', requireAdmin, async (req, res) => {
 
     const { count, rows } = await UserSubscription.findAndCountAll({
       where,
-      include: [{ model: SubscriptionPlan, as: 'plan', attributes: ['name', 'price', 'interval'] }],
+      include: [{ model: SubscriptionPlan, as: 'plan', attributes: ['id', 'name', 'price', 'interval'] }],
       order: [['createdAt', 'DESC']],
       limit: pageSize,
       offset: (page - 1) * pageSize,
     });
     res.json({ subscriptions: rows, total: count, page, pageSize });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /payments/subscription/admin/:id/cancel — force-cancel a subscription
+router.post('/admin/:id/cancel', requireAdmin, async (req, res) => {
+  try {
+    const sub = await UserSubscription.findByPk(req.params.id);
+    if (!sub) return res.status(404).json({ error: 'Subscription not found' });
+
+    if (sub.stripeSubscriptionId) {
+      // Cancel immediately in Stripe (not at period end)
+      const { getStripe } = await import('../services/stripe.service.js');
+      await getStripe().subscriptions.cancel(sub.stripeSubscriptionId);
+    }
+
+    await sub.update({
+      status:           'cancelled',
+      cancelAtPeriodEnd: false,
+      cancelledAt:       new Date(),
+    });
+
+    await notifyUser({
+      userId: sub.userId,
+      type:   NotificationType.WARNING,
+      title:  'Subscription cancelled by admin',
+      body:   'Your subscription has been cancelled by an administrator.',
+    }).catch(() => {});
+
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /payments/subscription/admin/:id/resume — resume a subscription
+router.post('/admin/:id/resume', requireAdmin, async (req, res) => {
+  try {
+    const sub = await UserSubscription.findByPk(req.params.id);
+    if (!sub) return res.status(404).json({ error: 'Subscription not found' });
+
+    if (sub.stripeSubscriptionId) {
+      await resumeSubscription(sub.stripeSubscriptionId);
+    }
+
+    await sub.update({ cancelAtPeriodEnd: false, status: 'active', cancelledAt: null });
+
+    await notifyUser({
+      userId: sub.userId,
+      type:   NotificationType.INFO,
+      title:  'Subscription reinstated',
+      body:   'Your subscription has been reinstated by an administrator.',
+    }).catch(() => {});
+
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /payments/subscription/admin/:id/change-plan — upgrade/downgrade
+router.post('/admin/:id/change-plan', requireAdmin, async (req, res) => {
+  const { planId } = req.body;
+  if (!planId) return res.status(400).json({ error: 'planId required' });
+
+  try {
+    const sub  = await UserSubscription.findByPk(req.params.id);
+    if (!sub) return res.status(404).json({ error: 'Subscription not found' });
+
+    const newPlan = await SubscriptionPlan.findByPk(planId);
+    if (!newPlan) return res.status(404).json({ error: 'Plan not found' });
+
+    if (sub.stripeSubscriptionId && newPlan.stripePriceId) {
+      const { getStripe } = await import('../services/stripe.service.js');
+      const stripeSub = await getStripe().subscriptions.retrieve(sub.stripeSubscriptionId);
+      const itemId = stripeSub.items.data[0]?.id;
+      if (itemId) {
+        await getStripe().subscriptions.update(sub.stripeSubscriptionId, {
+          items: [{ id: itemId, price: newPlan.stripePriceId }],
+          proration_behavior: 'always_invoice',
+        });
+      }
+    }
+
+    await sub.update({ planId });
+
+    await notifyUser({
+      userId: sub.userId,
+      type:   NotificationType.INFO,
+      title:  'Your plan has been changed',
+      body:   `An administrator has moved your subscription to the ${newPlan.name} plan.`,
+    }).catch(() => {});
+
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /payments/subscription/admin/grant — grant a free/manual subscription
+router.post('/admin/grant', requireAdmin, async (req, res) => {
+  const { userId, planId, periodDays = 30 } = req.body;
+  if (!userId || !planId) return res.status(400).json({ error: 'userId and planId required' });
+
+  try {
+    const plan = await SubscriptionPlan.findByPk(planId);
+    if (!plan) return res.status(404).json({ error: 'Plan not found' });
+
+    // Cancel any existing active sub first
+    await UserSubscription.update(
+      { status: 'cancelled', cancelledAt: new Date() },
+      { where: { userId, status: ['active', 'trialing'] } },
+    );
+
+    const now = new Date();
+    const end = new Date(now.getTime() + periodDays * 24 * 60 * 60 * 1000);
+
+    const granted = await UserSubscription.create({
+      userId,
+      planId,
+      status:              'active',
+      currentPeriodStart:  now,
+      currentPeriodEnd:    end,
+      cancelAtPeriodEnd:   false,
+    });
+
+    await notifyUser({
+      userId,
+      type:   NotificationType.INFO,
+      title:  `${plan.name} subscription granted`,
+      body:   `An administrator has granted you a ${plan.name} subscription for ${periodDays} days.`,
+    }).catch(() => {});
+
+    res.status(201).json(granted);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /payments/subscription/admin/:id/revoke — revoke a manually-granted subscription
+router.post('/admin/:id/revoke', requireAdmin, async (req, res) => {
+  try {
+    const sub = await UserSubscription.findByPk(req.params.id);
+    if (!sub) return res.status(404).json({ error: 'Subscription not found' });
+
+    await sub.update({ status: 'cancelled', cancelledAt: new Date() });
+
+    await notifyUser({
+      userId: sub.userId,
+      type:   NotificationType.WARNING,
+      title:  'Subscription revoked',
+      body:   'Your subscription has been revoked by an administrator.',
+    }).catch(() => {});
+
+    res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

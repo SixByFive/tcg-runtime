@@ -153,7 +153,7 @@ router.get('/:id', async (req, res) => {
 // ── POST /trades — initiate ───────────────────────────────────────────────────
 
 router.post('/', checkNotBanned, initiateMinuteLimiter, initiateDayLimiter, async (req, res) => {
-  const { userId, offeredCards = [], wantedCards = [] } = req.body;
+  const { userId, offeredCards = [], wantedCards = [], topUpAmount } = req.body;
   if (!userId) return res.status(400).json({ error: 'userId (the other party) is required' });
   if (userId === req.user.sub) return res.status(400).json({ error: 'Cannot trade with yourself' });
   if (!offeredCards.length && !wantedCards.length) {
@@ -185,6 +185,8 @@ router.post('/', checkNotBanned, initiateMinuteLimiter, initiateDayLimiter, asyn
       partyBId:    userId,
       initiatorId: req.user.sub,
       status:      'INITIATED',
+      topUpAmount: topUpAmount != null ? Number(topUpAmount) : null,
+      topUpPaidBy: topUpAmount != null ? req.user.sub : null,
     }, { transaction: t });
 
     const cardRows = [

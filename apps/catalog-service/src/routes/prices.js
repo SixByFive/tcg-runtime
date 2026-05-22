@@ -39,16 +39,114 @@ router.get('/history/:cardId', async (req, res) => {
   }
 });
 
-// GET /prices/rollups/:cardId?variant=normal
+/**
+ * GET /prices/observations?cardId=X&variant=Y&limit=90
+ *
+ * Gateway-facing endpoint. Returns observations in the GraphQL schema shape:
+ *   { date, market, mid, low, high }
+ * Translates from the DB columns: observed_at → date, amount_gbp → market.
+ */
+router.get('/observations', async (req, res) => {
+  try {
+    const { cardId, variant, limit = 90 } = req.query;
+    if (!cardId) return res.status(400).json({ error: 'cardId is required' });
+
+    const where = { card_id: cardId };
+    if (variant) where.variant = variant;
+
+    const rows = await PriceObservation.findAll({
+      where,
+      order: [['observed_at', 'DESC']],
+      limit: Math.min(Number(limit) || 90, 500),
+    });
+
+    // Reverse so oldest-first for charting, then map to schema shape
+    const observations = rows.reverse().map((r) => ({
+      date:   r.observed_at ? r.observed_at.toISOString().slice(0, 10) : null,
+      market: r.amount_gbp != null ? Number(r.amount_gbp) : null,
+      mid:    r.amount_gbp != null ? Number(r.amount_gbp) : null,
+      low:    null,
+      high:   null,
+    }));
+
+    res.json(observations);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * Shared helper: fetch rollup rows and transform into the GraphQL PriceRollup shape.
+ * DB: one row per (card_id, variant, days) with avg_gbp/min_gbp/max_gbp/last_gbp.
+ * Schema: { variant, currency, latest, d7, d30, d90 } grouped per variant.
+ */
+async function getRollupsForCard(cardId, variant) {
+  const where = { card_id: cardId };
+  if (variant) where.variant = variant;
+
+  const rows = await PriceRollup.findAll({ where, order: [['days', 'ASC']] });
+  if (!rows.length) return [];
+
+  // Group by variant
+  const byVariant = new Map();
+  for (const r of rows) {
+    const v = r.variant ?? 'normal';
+    if (!byVariant.has(v)) byVariant.set(v, {});
+    byVariant.get(v)[r.days] = r;
+  }
+
+  const result = [];
+  for (const [v, byDays] of byVariant) {
+    // Use the longest available window as the "latest" reference
+    const latestRow = byDays[90] ?? byDays[30] ?? byDays[7] ?? Object.values(byDays)[0];
+    const computedAt = latestRow?.computed_at;
+
+    const makeStats = (row) => {
+      if (!row) return null;
+      const avg = row.avg_gbp != null ? Number(row.avg_gbp) : null;
+      const last = row.last_gbp != null ? Number(row.last_gbp) : null;
+      const min  = row.min_gbp != null ? Number(row.min_gbp)  : null;
+      // change = last - avg (rough delta over the period)
+      const change    = avg != null && last != null ? Number((last - avg).toFixed(4)) : null;
+      const changePct = avg != null && avg !== 0 && change != null
+        ? Number(((change / avg) * 100).toFixed(2)) : null;
+      return { avg, change, changePct, min, max: row.max_gbp != null ? Number(row.max_gbp) : null };
+    };
+
+    result.push({
+      variant:  v,
+      currency: 'GBP',
+      latest: {
+        date:   computedAt ? new Date(computedAt).toISOString().slice(0, 10) : null,
+        market: latestRow?.last_gbp != null ? Number(latestRow.last_gbp) : null,
+        mid:    latestRow?.avg_gbp  != null ? Number(latestRow.avg_gbp)  : null,
+      },
+      d7:  makeStats(byDays[7]),
+      d30: makeStats(byDays[30]),
+      d90: makeStats(byDays[90]),
+    });
+  }
+
+  return result;
+}
+
+// GET /prices/rollups/:cardId?variant=normal   (original URL-param form, kept for compat)
 router.get('/rollups/:cardId', async (req, res) => {
   try {
-    const where = { card_id: req.params.cardId };
-    if (req.query.variant) where.variant = req.query.variant;
-    const rows = await PriceRollup.findAll({
-      where,
-      order: [['days', 'ASC']],
-    });
-    res.json(rows);
+    const rollups = await getRollupsForCard(req.params.cardId, req.query.variant);
+    res.json(rollups);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /prices/rollups?cardId=X&variant=Y   (query-param form used by the gateway client)
+router.get('/rollups', async (req, res) => {
+  try {
+    const { cardId, variant } = req.query;
+    if (!cardId) return res.status(400).json({ error: 'cardId is required' });
+    const rollups = await getRollupsForCard(cardId, variant);
+    res.json(rollups);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

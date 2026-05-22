@@ -71,7 +71,7 @@ export async function getMyCapabilities(userId) {
     planName: 'Free',
     platformFeePercent: 8,
     maxBinders: 3,
-    maxCollectionCards: 500,
+    maxCollectionCards: null, // unlimited — collection is never capped
     maxActiveListings: 5,
     maxActiveTrades: 3,
     features: [],
@@ -124,12 +124,50 @@ export async function getSubscriptionPortal(token) {
   });
 }
 
-export async function adminGetSubscriptions(token, { page = 1, pageSize = 50 } = {}) {
+export async function adminGetSubscriptions(token, { status, page = 1, pageSize = 50 } = {}) {
   const p = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
-  const data = await request(`/payments/admin?${p.toString()}`, {
+  if (status) p.set('status', status);
+  return request(`/payments/subscription/admin?${p.toString()}`, { headers: authHeaders(token) });
+}
+
+export async function adminCancelSubscription(token, id) {
+  return request(`/payments/subscription/admin/${encodeURIComponent(id)}/cancel`, {
+    method: 'POST',
     headers: authHeaders(token),
+    body: JSON.stringify({}),
   });
-  return data?.subscriptions ?? data ?? [];
+}
+
+export async function adminResumeSubscription(token, id) {
+  return request(`/payments/subscription/admin/${encodeURIComponent(id)}/resume`, {
+    method: 'POST',
+    headers: authHeaders(token),
+    body: JSON.stringify({}),
+  });
+}
+
+export async function adminChangePlan(token, id, planId) {
+  return request(`/payments/subscription/admin/${encodeURIComponent(id)}/change-plan`, {
+    method: 'POST',
+    headers: authHeaders(token),
+    body: JSON.stringify({ planId }),
+  });
+}
+
+export async function adminGrantSubscription(token, { userId, planId, periodDays }) {
+  return request('/payments/subscription/admin/grant', {
+    method: 'POST',
+    headers: authHeaders(token),
+    body: JSON.stringify({ userId, planId, periodDays }),
+  });
+}
+
+export async function adminRevokeSubscription(token, id) {
+  return request(`/payments/subscription/admin/${encodeURIComponent(id)}/revoke`, {
+    method: 'POST',
+    headers: authHeaders(token),
+    body: JSON.stringify({}),
+  });
 }
 
 // ─── Transactions ─────────────────────────────────────────────────────────────
@@ -142,10 +180,53 @@ export async function getMyTransactions(token, { page = 1, pageSize = 20 } = {})
   return data?.transactions ?? data ?? [];
 }
 
-export async function adminGetTransactions(token, { page = 1, pageSize = 50 } = {}) {
+export async function adminGetTransactions(token, { page = 1, pageSize = 50, type, status } = {}) {
   const p = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
-  const data = await request(`/payments/admin/transactions?${p.toString()}`, {
+  if (type)   p.set('type', type);
+  if (status) p.set('status', status);
+  return request(`/payments/transactions/admin?${p.toString()}`, { headers: authHeaders(token) });
+}
+
+export async function adminGetRevenueSummary(token) {
+  return request('/payments/transactions/admin/revenue-summary', { headers: authHeaders(token) });
+}
+
+export async function adminUpdatePlanDetails(token, id, input) {
+  return request(`/payments/plans/admin/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: authHeaders(token),
+    body: JSON.stringify(input),
+  });
+}
+
+// ─── Wallet ───────────────────────────────────────────────────────────────────
+
+export async function getMyWallet(token, { limit = 20, offset = 0 } = {}) {
+  const p = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+  return request(`/payments/wallet?${p.toString()}`, {
     headers: authHeaders(token),
   });
-  return data?.transactions ?? data ?? [];
+}
+
+export async function createTopupIntent(token, { amountPence }) {
+  return request('/payments/wallet/topup', {
+    method: 'POST',
+    headers: authHeaders(token),
+    body: JSON.stringify({ amountPence }),
+  });
+}
+
+export async function confirmTopup(token, paymentIntentId) {
+  return request(`/payments/wallet/topup/${encodeURIComponent(paymentIntentId)}/confirm`, {
+    method: 'POST',
+    headers: authHeaders(token),
+  });
+}
+
+export async function requestWithdrawal(token, { amountPence, sortCode, accountNumber, accountName }) {
+  return request('/payments/wallet/withdraw', {
+    method: 'POST',
+    headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ amountPence, sortCode, accountNumber, accountName }),
+  });
 }

@@ -2,15 +2,27 @@ import { Router } from 'express';
 import { Op } from 'sequelize';
 import { requireAuth } from '../middleware/auth.js';
 import {
-  CardListing, Offer, Order, SellerProfile, OwnershipRecord,
+  CardListing, Offer, Order, SellerProfile, OwnershipRecord, MarketplaceAgreement,
 } from '../models/index.js';
+
+const MARKETPLACE_RULES = [
+  'Only list cards you physically own. Proof-of-ownership photos are required before a listing goes live.',
+  'All listings must accurately describe the card\'s condition and variation. Misrepresentation will result in removal.',
+  'No counterfeit, fake, proxy, or altered cards. Violations result in immediate account suspension.',
+  'Cards from sets released within the last 14 days may not be listed for sale or trade.',
+  'Sellers must dispatch within 3 business days of a confirmed, paid order.',
+  'Listings must use the correct parcel size for the item(s) being shipped.',
+  'No price manipulation, shill bidding, or coordinated listing activity.',
+  'A platform fee is deducted from each completed sale. This is non-negotiable.',
+  'Disputes must be raised through the platform. Do not attempt to resolve chargebacks directly.',
+  'SixByFive TCG reserves the right to remove any listing or suspend any account at its discretion.',
+];
 import {
   generateProofCode, proofCodeExpiry, saveProofImage, moderateProof,
 } from '../services/proof.service.js';
 import { getRates } from '../services/shipping.service.js';
-import {
-  createEscrowPaymentIntent, calculateFee,
-} from '../services/stripe.service.js';
+import { createEscrowPaymentIntent } from '../services/stripe.service.js';
+import { calculateFeeForSeller } from '../services/fees.service.js';
 import { notifyUser, NotificationType, checkCapabilities } from '@sbf/contracts';
 
 const router = Router();
@@ -40,6 +52,33 @@ async function triggerWishlistMatch(listing) {
   }
 }
 
+// ─── Marketplace rules ────────────────────────────────────────────────────────
+
+router.get('/rules', (_req, res) => {
+  res.json({ rules: MARKETPLACE_RULES });
+});
+
+router.get('/agreed', requireAuth, async (req, res) => {
+  try {
+    const row = await MarketplaceAgreement.findOne({ where: { userId: req.user.sub } });
+    res.json({ agreed: !!row });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/agree', requireAuth, async (req, res) => {
+  try {
+    await MarketplaceAgreement.findOrCreate({
+      where:    { userId: req.user.sub },
+      defaults: { userId: req.user.sub, agreedAt: new Date() },
+    });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ─── Public browse ────────────────────────────────────────────────────────────
 
 router.get('/', async (req, res) => {
@@ -50,6 +89,7 @@ router.get('/', async (req, res) => {
 
     if (req.query.cardId)    where.cardId    = req.query.cardId;
     if (req.query.condition) where.condition = req.query.condition;
+    if (req.query.variation) where.variation = req.query.variation;
     if (req.query.sellerId)  where.sellerId  = req.query.sellerId;
     if (req.query.minPrice || req.query.maxPrice) {
       where.price = {};
@@ -57,10 +97,13 @@ router.get('/', async (req, res) => {
       if (req.query.maxPrice) where.price[Op.lte] = Number(req.query.maxPrice);
     }
 
+    const sortMap = { PRICE_ASC: ['price', 'ASC'], PRICE_DESC: ['price', 'DESC'] };
+    const orderBy = sortMap[req.query.sort] || ['createdAt', 'DESC'];
+
     const { count, rows } = await CardListing.findAndCountAll({
       where,
       attributes: { exclude: ['proofImagePath', 'sellerStripeAccountId'] },
-      order: [['createdAt', 'DESC']],
+      order: [orderBy],
       limit: pageSize,
       offset: (page - 1) * pageSize,
     });
@@ -77,8 +120,8 @@ router.post('/', requireAuth, async (req, res) => {
   const {
     cardId, title, description, condition, variant,
     price, currency, quantity,
-    shippingType, shippingPrice, parcelSize,
-    allowOffers, offerMinPrice,
+    shippingType, shippingPrice, parcelSize, labelPaidBy,
+    allowOffers, offerMinPrice, willTrade,
   } = req.body;
 
   if (!cardId || !title || !condition || !price) {
@@ -86,6 +129,36 @@ router.post('/', requireAuth, async (req, res) => {
   }
 
   try {
+    // ── Marketplace rules agreement required ─────────────────────────────────
+    const agreed = await MarketplaceAgreement.findOne({ where: { userId: req.user.sub } });
+    if (!agreed) {
+      return res.status(403).json({ error: 'MARKETPLACE_AGREEMENT_REQUIRED' });
+    }
+
+    // ── New-set embargo: block listings for 14 days after a set's release ────
+    const EMBARGO_DAYS = Number(process.env.NEW_SET_EMBARGO_DAYS ?? 14);
+    const catalogUrl   = process.env.CATALOG_SERVICE_URL || 'http://localhost:4012';
+    try {
+      const catalogRes = await fetch(`${catalogUrl}/cards/${encodeURIComponent(cardId)}`);
+      if (catalogRes.ok) {
+        const cardData = await catalogRes.json();
+        const releaseDate = cardData?.Set?.release_date ?? cardData?.set?.release_date ?? null;
+        if (releaseDate) {
+          const released  = new Date(releaseDate);
+          const embargoEnd = new Date(released.getTime() + EMBARGO_DAYS * 24 * 60 * 60 * 1000);
+          if (new Date() < embargoEnd) {
+            const unlocksAt = embargoEnd.toISOString().slice(0, 10);
+            return res.status(403).json({
+              error: `This set was released less than ${EMBARGO_DAYS} days ago. Listings open on ${unlocksAt}.`,
+              embargoEndsAt: unlocksAt,
+            });
+          }
+        }
+      }
+    } catch {
+      // Non-fatal — if catalog is unreachable, allow the listing through
+    }
+
     // Enforce subscription listing limit
     const caps = await checkCapabilities(req.user.sub);
     if (caps.maxActiveListings !== null) {
@@ -121,12 +194,38 @@ router.post('/', requireAuth, async (req, res) => {
       shippingType:  shippingType || 'FIXED',
       shippingPrice: shippingType === 'FIXED' ? (shippingPrice ?? null) : null,
       parcelSize:    parcelSize || 'LARGE_LETTER',
+      labelPaidBy:   labelPaidBy === 'buyer' ? 'buyer' : 'seller',
       allowOffers:   allowOffers !== false,
       offerMinPrice: offerMinPrice ?? null,
+      willTrade:     willTrade === true,
       sellerStripeAccountId: stripeAccountId,
     });
 
     res.status(201).json(listing);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── My listings (seller) ─────────────────────────────────────────────────────
+
+router.get('/mine', requireAuth, async (req, res) => {
+  try {
+    const sellerId = req.user.sub;
+    const page     = Math.max(1, Number(req.query.page) || 1);
+    const pageSize = Math.min(100, Number(req.query.pageSize) || 50);
+    const where    = { sellerId };
+    if (req.query.status) where.status = req.query.status;
+
+    const { count, rows } = await CardListing.findAndCountAll({
+      where,
+      attributes: { exclude: ['proofImagePath', 'sellerStripeAccountId'] },
+      order: [['createdAt', 'DESC']],
+      limit: pageSize,
+      offset: (page - 1) * pageSize,
+    });
+
+    res.json({ listings: rows, total: count, page, pageSize });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -174,7 +273,7 @@ router.patch('/:id', requireAuth, async (req, res) => {
 
     const allowed = [
       'title', 'description', 'price', 'quantity',
-      'shippingType', 'shippingPrice', 'parcelSize',
+      'shippingType', 'shippingPrice', 'parcelSize', 'labelPaidBy',
       'allowOffers', 'offerMinPrice', 'condition', 'variant',
     ];
     const updates = {};
@@ -264,7 +363,15 @@ router.post('/:id/proof', requireAuth, async (req, res) => {
 
       triggerWishlistMatch(listing).catch(() => {});
     }
-    // pending_admin → stays PENDING_PROOF, admin reviews
+    if (result === 'pending_admin') {
+      await notifyUser({
+        userId:  req.user.sub,
+        type:    NotificationType.INFO,
+        title:   'Proof submitted — under review',
+        body:    `Your proof photo for "${listing.title}" is being reviewed by a moderator. We'll let you know once it's approved.`,
+        linkUrl: `/listings/${listing.id}`,
+      }).catch(() => {});
+    }
 
     await listing.update(updates);
     res.json({ ok: true, result });
@@ -322,9 +429,14 @@ router.post('/:id/shipping-rates', requireAuth, async (req, res) => {
 // ─── Buy it now ───────────────────────────────────────────────────────────────
 
 router.post('/:id/buy', requireAuth, async (req, res) => {
-  const { buyerAddress, shippingRateId, shipmentId } = req.body;
+  const { buyerAddress, shippingRateId, shipmentId, walletAmountPence = 0 } = req.body;
 
   try {
+    const agreed = await MarketplaceAgreement.findOne({ where: { userId: req.user.sub } });
+    if (!agreed) {
+      return res.status(403).json({ error: 'MARKETPLACE_AGREEMENT_REQUIRED' });
+    }
+
     const listing = await CardListing.findByPk(req.params.id);
     if (!listing) return res.status(404).json({ error: 'Listing not found' });
     if (listing.status !== 'ACTIVE') return res.status(409).json({ error: 'Listing is not available' });
@@ -336,11 +448,50 @@ router.post('/:id/buy', requireAuth, async (req, res) => {
     }
 
     const salePricePence  = Math.round(Number(listing.price) * 100);
-    const shippingPence   = listing.shippingType === 'FIXED'
+    const baseShippingPence = listing.shippingType === 'FIXED'
       ? Math.round(Number(listing.shippingPrice ?? 0) * 100)
-      : 0; // dynamic shipping cost is resolved when seller buys label
-    const totalPence      = salePricePence + shippingPence;
-    const platformFeePence = calculateFee(salePricePence);
+      : 0;
+
+    // When the buyer pays for the label, fetch a P2G quote and add it to the order total
+    let labelQuotePence = 0;
+    if (listing.labelPaidBy === 'buyer' && buyerAddress?.postcode) {
+      const sellerProfile = await SellerProfile.findByPk(listing.sellerId, {
+        attributes: ['returnPostcode'],
+      });
+      if (sellerProfile?.returnPostcode) {
+        const shippingUrl = process.env.SHIPPING_SERVICE_URL || 'http://localhost:4023';
+        const internalKey = process.env.INTERNAL_API_KEY;
+        try {
+          const qRes = await fetch(`${shippingUrl}/internal/shipping/quote`, {
+            method:  'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(internalKey ? { 'x-internal-key': internalKey } : {}),
+            },
+            body: JSON.stringify({
+              to:           { postcode: buyerAddress.postcode },
+              from:         { postcode: sellerProfile.returnPostcode },
+              parcelSize:   listing.parcelSize || 'LARGE_LETTER',
+              declaredValue: Number(listing.price) || 10,
+            }),
+          });
+          if (qRes.ok) {
+            const q = await qRes.json();
+            labelQuotePence = Math.round((q.amount || 0) * 100);
+          }
+        } catch {
+          // Non-fatal — proceed without label cost in total
+        }
+      }
+    }
+
+    const shippingPence    = baseShippingPence + labelQuotePence;
+    const totalPence       = salePricePence + shippingPence;
+    const platformFeePence = await calculateFeeForSeller(salePricePence, listing.sellerId);
+
+    // Clamp wallet contribution to total
+    const walletPence = Math.min(Math.max(0, Math.round(Number(walletAmountPence) || 0)), totalPence);
+    const cardPence   = totalPence - walletPence;
 
     // Create order record
     const order = await Order.create({
@@ -355,7 +506,11 @@ router.post('/:id/buy', requireAuth, async (req, res) => {
       currency:   listing.currency || 'GBP',
       buyerAddressJson: buyerAddress || null,
       sellerStripeAccountId: listing.sellerStripeAccountId,
-      metadataJson: shippingRateId ? { shipmentId, shippingRateId } : null,
+      metadataJson: {
+        ...(shippingRateId ? { shipmentId, shippingRateId } : {}),
+        ...(labelQuotePence > 0 ? { labelQuotePence } : {}),
+      } || null,
+      walletAmountPence: walletPence,
       paymentStatus: 'pending',
     });
 
@@ -366,20 +521,81 @@ router.post('/:id/buy', requireAuth, async (req, res) => {
       await listing.decrement('quantity');
     }
 
-    // Create Stripe escrow PaymentIntent
+    // Deduct wallet portion
+    if (walletPence > 0) {
+      const paymentsUrl = process.env.PAYMENTS_SERVICE_URL || 'http://localhost:4019';
+      const key = process.env.INTERNAL_API_KEY;
+      const walletRes = await fetch(`${paymentsUrl}/internal/wallet/spend`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(key ? { 'x-internal-key': key } : {}),
+        },
+        body: JSON.stringify({
+          userId:      req.user.sub,
+          amountPence: walletPence,
+          orderId:     order.id,
+          description: `Order ${order.id.slice(0, 8)} — wallet payment £${(walletPence / 100).toFixed(2)}`,
+        }),
+      });
+      if (!walletRes.ok) {
+        const errData = await walletRes.json().catch(() => ({}));
+        // Undo listing reservation
+        if (listing.quantity <= 1) {
+          await listing.update({ status: 'ACTIVE', soldAt: null });
+        } else {
+          await listing.increment('quantity');
+        }
+        await order.destroy();
+        return res.status(walletRes.status).json({ error: errData.error || 'Wallet payment failed' });
+      }
+    }
+
+    // Create Stripe escrow PaymentIntent for card portion (if any)
     let clientSecret = null;
-    if (listing.sellerStripeAccountId) {
-      const pi = await createEscrowPaymentIntent({
-        amountPence:          totalPence,
-        currency:             (listing.currency || 'GBP').toLowerCase(),
-        sellerStripeAccountId: listing.sellerStripeAccountId,
-        orderId:              order.id,
-      });
+    if (cardPence > 0 && listing.sellerStripeAccountId) {
+      try {
+        const pi = await createEscrowPaymentIntent({
+          amountPence:           cardPence,
+          currency:              (listing.currency || 'GBP').toLowerCase(),
+          sellerStripeAccountId: listing.sellerStripeAccountId,
+          platformFeePence:      Math.round(platformFeePence * (cardPence / totalPence)),
+          orderId:               order.id,
+        });
+        await order.update({
+          stripePaymentIntentId: pi.id,
+          stripeClientSecret:    pi.client_secret,
+        });
+        clientSecret = pi.client_secret;
+      } catch (stripeErr) {
+        // Refund wallet if Stripe PI creation fails
+        if (walletPence > 0) {
+          const paymentsUrl = process.env.PAYMENTS_SERVICE_URL || 'http://localhost:4019';
+          const key = process.env.INTERNAL_API_KEY;
+          await fetch(`${paymentsUrl}/internal/wallet/refund-purchase`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(key ? { 'x-internal-key': key } : {}),
+            },
+            body: JSON.stringify({ userId: req.user.sub, amountPence: walletPence, orderId: order.id }),
+          }).catch(() => {});
+        }
+        await order.destroy();
+        if (listing.quantity <= 1) {
+          await listing.update({ status: 'ACTIVE', soldAt: null });
+        } else {
+          await listing.increment('quantity');
+        }
+        throw stripeErr;
+      }
+    } else if (cardPence === 0) {
+      // Fully wallet-paid — mark as authorised and ready to ship immediately
       await order.update({
-        stripePaymentIntentId: pi.id,
-        stripeClientSecret:    pi.client_secret,
+        paymentStatus:    'authorised',
+        fulfilmentStatus: 'awaiting_shipment',
+        authorisedAt:     new Date(),
       });
-      clientSecret = pi.client_secret;
     }
 
     // Notify seller

@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import { requireAuth } from '../middleware/auth.js';
 import { CardListing, Offer, Order, SellerProfile } from '../models/index.js';
-import { createEscrowPaymentIntent, calculateFee } from '../services/stripe.service.js';
+import { createEscrowPaymentIntent } from '../services/stripe.service.js';
+import { calculateFeeForSeller } from '../services/fees.service.js';
 import { notifyUser, NotificationType } from '@sbf/contracts';
 
 const router = Router();
@@ -88,6 +89,24 @@ router.get('/', requireAuth, async (req, res) => {
   }
 });
 
+// ─── GET /offers/incoming — all pending offers on the seller's listings ──────
+
+router.get('/incoming', requireAuth, async (req, res) => {
+  try {
+    const offers = await Offer.findAll({
+      include: [{
+        model: CardListing,
+        where: { sellerId: req.user.sub },
+        attributes: ['id', 'title', 'price', 'cardId', 'sellerId'],
+      }],
+      order: [['createdAt', 'DESC']],
+    });
+    res.json(offers);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ─── POST /offers/:id/respond — seller accepts, declines, or counters ─────────
 
 router.post('/:id/respond', requireAuth, async (req, res) => {
@@ -146,7 +165,8 @@ router.post('/:id/respond', requireAuth, async (req, res) => {
       ? Math.round(Number(listing.shippingPrice ?? 0) * 100)
       : 0;
     const totalPence = agreedPricePence + shippingPence;
-    const feePence   = calculateFee(agreedPricePence);
+    // Use the seller's subscription tier for their platform fee rate
+    const feePence   = await calculateFeeForSeller(agreedPricePence, listing.sellerId);
 
     const order = await Order.create({
       listingId:   listing.id,
@@ -180,6 +200,7 @@ router.post('/:id/respond', requireAuth, async (req, res) => {
         amountPence: totalPence,
         currency:    (listing.currency || 'GBP').toLowerCase(),
         sellerStripeAccountId: listing.sellerStripeAccountId,
+        platformFeePence: feePence,
         orderId: order.id,
       });
       await order.update({

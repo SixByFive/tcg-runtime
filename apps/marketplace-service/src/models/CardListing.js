@@ -42,9 +42,15 @@ export default function defineCardListing(sequelize) {
       defaultValue: 'LARGE_LETTER',
     },
 
-    // Offers
+    labelPaidBy: {
+      type: DataTypes.ENUM('seller', 'buyer'),
+      defaultValue: 'seller',
+    },
+
+    // Offers / trading
     allowOffers:   { type: DataTypes.BOOLEAN, defaultValue: true },
     offerMinPrice: { type: DataTypes.DECIMAL(10, 4), allowNull: true },
+    willTrade:     { type: DataTypes.BOOLEAN, defaultValue: false },
 
     // Post-sale
     sellerStripeAccountId: { type: DataTypes.STRING, allowNull: true },

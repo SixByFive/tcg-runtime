@@ -37,12 +37,14 @@ export async function initModels() {
   TradeProof.belongsTo(Trade, { foreignKey: 'tradeId' });
 
   if (process.env.NODE_ENV === 'development') {
-    await Trade.sync({ alter: true });
-    await TradeCard.sync({ alter: true });
-    await TradeProof.sync({ alter: true });
-    await TradeDispute.sync({ alter: true });
-    await OwnershipRecord.sync({ alter: true });
-    await TradeBan.sync({ alter: true });
+    // alter: { drop: false } adds new columns/indexes but won't touch existing
+    // FK-constrained columns (avoids "used in a foreign key constraint" errors).
+    await Trade.sync({ alter: { drop: false } });
+    await TradeCard.sync({ alter: { drop: false } });
+    await TradeProof.sync({ alter: { drop: false } });
+    await TradeDispute.sync({ alter: { drop: false } });
+    await OwnershipRecord.sync({ alter: { drop: false } });
+    await TradeBan.sync({ alter: { drop: false } });
   } else {
     await Trade.sync({ force: false });
     await TradeCard.sync({ force: false });

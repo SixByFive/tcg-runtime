@@ -17,24 +17,31 @@ First boot prompts you to create an admin account.
 
 ## Recommended monitors
 
-Add these in the UI (type: HTTP(s), interval: 60s):
+Use **Docker Container** monitor type — reads health state directly from the Docker socket, no network access needed. Stays fully independent of the backend stack.
 
-| Name | URL |
-|------|-----|
-| Gateway | `http://localhost:4010/health` |
-| Auth | `http://localhost:4011/health` |
-| Collections | `http://localhost:4013/health` |
-| Catalog | `http://localhost:4012/health` |
-| Notifications | `http://localhost:4016/health` |
-| Messaging | `http://localhost:4022/health` |
-| Realtime | `http://localhost:4018/health` |
-| Marketplace | `http://localhost:4014/health` |
-| Trading | `http://localhost:4015/health` |
-| Payments | `http://localhost:4019/health` |
-| Worker | `http://localhost:4020/health` |
-| Media | `http://localhost:4017/health` |
+First, set up the Docker host in **Settings → Docker Hosts**:
+- **Name**: Local
+- **Connection Type**: Socket
+- **Socket Path**: `/var/run/docker.sock`
 
-Use `localhost` since Uptime Kuma is on the same server — no need to go through the public domain.
+Then add a monitor for each container (type: Docker Container, Docker Host: Local):
+
+| Friendly Name | Container Name |
+|---------------|----------------|
+| Gateway | `Gateway` |
+| Auth | `Auth` |
+| Catalog | `Catalog` |
+| Collections | `Collections` |
+| Notifications | `Notifications` |
+| Messaging | `Messaging` |
+| Realtime | `Realtime` |
+| Marketplace | `Marketplace` |
+| Trading | `Trading` |
+| Payments | `Payments` |
+| Worker | `Worker` |
+| Media | `Media` |
+
+Container names match those shown in `docker ps`.
 
 ## Alerts
 

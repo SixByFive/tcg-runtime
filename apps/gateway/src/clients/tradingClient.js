@@ -90,11 +90,16 @@ export async function adminGetTradeBans(token) {
 
 // ─── Mutations ────────────────────────────────────────────────────────────────
 
-export async function initiateTrade(token, { userId, offeredCards = [], wantedCards = [] }) {
+export async function initiateTrade(token, { userId, offeredCards = [], wantedCards = [], topUpAmount = null }) {
   return request('/trades', {
     method: 'POST',
     headers: authHeaders(token),
-    body: JSON.stringify({ userId, offeredCards, wantedCards }),
+    body: JSON.stringify({
+      userId,
+      offeredCards,
+      wantedCards,
+      ...(topUpAmount != null ? { topUpAmount } : {}),
+    }),
   });
 }
 

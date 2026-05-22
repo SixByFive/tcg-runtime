@@ -70,11 +70,13 @@ router.patch('/profile', requireAuth, async (req, res) => {
       updates.dob = req.body.dob;
     }
 
-    // Parent email only relevant for teens
+    // Parent email only relevant for teens — only validate age when actually setting one
     if (req.body.parentEmail !== undefined) {
-      const age = ageFromDob(updates.dob ?? profile.dob);
-      if (age !== null && (age < 13 || age >= 16)) {
-        return res.status(400).json({ error: 'Parent email is only applicable for accounts aged 13–15' });
+      if (req.body.parentEmail) {
+        const age = ageFromDob(updates.dob ?? profile.dob);
+        if (age !== null && (age < 13 || age >= 16)) {
+          return res.status(400).json({ error: 'Parent email is only applicable for accounts aged 13–15' });
+        }
       }
       updates.parentEmail = req.body.parentEmail || null;
       // Clear verification if email changes
