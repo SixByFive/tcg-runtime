@@ -910,6 +910,7 @@ export const typeDefs = gql`
   type ProductListing implements ListingBase {
     id: ID!
     type: String
+    condition: String
     title: String
     description: String
     imageUrl: String
