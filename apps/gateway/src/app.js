@@ -127,7 +127,7 @@ export async function createApp({ logger }) {
     }
   });
 
-  app.use(express.json());
+  app.use(express.json({ limit: '10mb' }));
 
   app.get('/health', (_req, res) => {
     sendJson(res, 200, {

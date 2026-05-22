@@ -696,6 +696,7 @@ export const typeDefs = gql`
     price: Float
     currency: String
     quantity: Int
+    condition: String
     allowOffers: Boolean
     status: String
     createdAt: String
