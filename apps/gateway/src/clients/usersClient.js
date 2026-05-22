@@ -262,8 +262,10 @@ export async function getAuditLogs(token, { page = 1, pageSize = 50, userId, act
 
 // ─── Admin ────────────────────────────────────────────────────────────────────
 
-export async function adminGetUsers(token, { limit = 100, offset = 0 } = {}) {
-  const data = await request(`/admin/users?limit=${limit}&offset=${offset}`, {
+export async function adminGetUsers(token, { limit = 100, offset = 0, search } = {}) {
+  const p = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+  if (search) p.set('search', search);
+  const data = await request(`/admin/users?${p.toString()}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   return data?.users ?? [];

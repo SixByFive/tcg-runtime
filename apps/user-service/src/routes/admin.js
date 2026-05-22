@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { Op } from 'sequelize';
 import { requireAdmin } from '../middleware/requireAuth.js';
 import { User, Profile, UserReputation, AdminAction } from '../models/index.js';
 
@@ -19,12 +20,20 @@ const router = Router();
 
 router.use(requireAdmin);
 
-// GET /admin/users?limit=100&offset=0
+// GET /admin/users?limit=100&offset=0&search=term
 router.get('/users', async (req, res) => {
   const limit  = Math.min(Number(req.query.limit)  || 100, 500);
   const offset = Number(req.query.offset) || 0;
+  const search = req.query.search?.trim() || null;
   try {
+    const where = search
+      ? { [Op.or]: [
+          { username: { [Op.like]: `%${search}%` } },
+          { email:    { [Op.like]: `%${search}%` } },
+        ] }
+      : {};
     const { count, rows } = await User.findAndCountAll({
+      where,
       attributes: { exclude: ['password'] },
       include: [{ model: Profile, as: 'profile', required: false }],
       limit,

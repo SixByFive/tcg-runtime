@@ -124,7 +124,7 @@ export const typeDefs = gql`
     auditLogs(userId: ID, action: String, targetId: String, targetType: String, page: Int, pageSize: Int): [AuditLog!]!
 
     # ── Admin ─────────────────────────────────────────────────────────────────────
-    allUsers(limit: Int, offset: Int): [AdminUser!]!
+    allUsers(limit: Int, offset: Int, search: String): [AdminUser!]!
     adminNotifications(page: Int, pageSize: Int, userId: ID, type: String): NotificationPage!
     adminBinders(limit: Int, offset: Int): [AdminBinder!]!
     adminUserCollections(limit: Int, search: String): [UserCollectionSummary!]!

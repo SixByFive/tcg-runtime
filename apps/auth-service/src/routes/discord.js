@@ -62,7 +62,7 @@ router.get('/start-url', requireAuth, (req, res) => {
     const returnPath = typeof req.query.return === 'string'
       ? normalizeReturnPath(req.query.return)
       : '/account?tab=security';
-    const state = signState({ u: String(req.user.id), r: returnPath });
+    const state = signState({ u: String(req.user.sub || req.user.id), r: returnPath });
     res.json({ url: buildAuthorizeUrl(state) });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -76,7 +76,7 @@ router.get('/start', requireAuth, (req, res) => {
     const returnPath = typeof req.query.return === 'string'
       ? normalizeReturnPath(req.query.return)
       : '/account?tab=security';
-    const state = signState({ u: String(req.user.id), r: returnPath });
+    const state = signState({ u: String(req.user.sub || req.user.id), r: returnPath });
     res.redirect(buildAuthorizeUrl(state));
   } catch (err) {
     res.status(500).json({ error: err.message });
