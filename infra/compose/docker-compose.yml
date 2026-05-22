@@ -63,6 +63,7 @@ services:
       PAYMENTS_SERVICE_URL: http://payments-service:4019
       USER_SERVICE_URL: http://user-service:4021
       MESSAGING_SERVICE_URL: http://messaging-service:4022
+      SHIPPING_SERVICE_URL: http://shipping-service:4023
     ports:
       - "4010:4010"
     depends_on:
@@ -418,6 +419,34 @@ services:
     mem_reservation: 128m
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:4019/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  shipping-service:
+    <<: *host-gateway
+    container_name: Shipping
+    build:
+      context: ../..
+      dockerfile: apps/shipping-service/Dockerfile
+    restart: unless-stopped
+    environment:
+      SERVICE_NAME: shipping-service
+      ENV_PROFILE: docker
+      NODE_ENV: production
+      NODE_OPTIONS: --max-old-space-size=148
+      SHIPPING_SERVICE_PUBLIC_URL: https://backendtcg.sixbyfive.com
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY:-}
+    expose:
+      - "4023"
+    depends_on:
+      notifications-service:
+        condition: service_healthy
+    mem_limit: 192m
+    mem_reservation: 96m
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:4023/health"]
       interval: 30s
       timeout: 5s
       retries: 3
