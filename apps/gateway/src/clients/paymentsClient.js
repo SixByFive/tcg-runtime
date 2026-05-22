@@ -102,6 +102,14 @@ export async function createSubscription(token, { planId, paymentMethodId }) {
   });
 }
 
+export async function changePlan(token, planId) {
+  return request('/payments/subscription/change-plan', {
+    method: 'POST',
+    headers: authHeaders(token),
+    body: JSON.stringify({ planId }),
+  });
+}
+
 export async function cancelSubscription(token) {
   return request('/payments/subscription/cancel', {
     method: 'POST',

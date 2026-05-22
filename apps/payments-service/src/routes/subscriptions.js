@@ -114,6 +114,45 @@ router.post('/resume', requireAuth, async (req, res) => {
   }
 });
 
+// ─── POST /payments/subscription/change-plan — user switches their own plan ───
+
+router.post('/change-plan', requireAuth, async (req, res) => {
+  const { planId } = req.body;
+  if (!planId) return res.status(400).json({ error: 'planId required' });
+
+  try {
+    const sub = await UserSubscription.findOne({
+      where: { userId: req.user.sub, status: { [Op.in]: ['active', 'trialing'] } },
+      include: [{ model: SubscriptionPlan, as: 'plan' }],
+    });
+    if (!sub) return res.status(404).json({ error: 'No active subscription found' });
+
+    const newPlan = await SubscriptionPlan.findByPk(planId);
+    if (!newPlan || !newPlan.active) return res.status(404).json({ error: 'Plan not found' });
+    if (sub.planId === planId) return res.status(409).json({ error: 'Already on this plan' });
+
+    if (sub.stripeSubscriptionId && newPlan.stripePriceId) {
+      const { getStripe } = await import('../services/stripe.service.js');
+      const stripeSub = await getStripe().subscriptions.retrieve(sub.stripeSubscriptionId);
+      const itemId = stripeSub.items.data[0]?.id;
+      if (itemId) {
+        await getStripe().subscriptions.update(sub.stripeSubscriptionId, {
+          items: [{ id: itemId, price: newPlan.stripePriceId }],
+          proration_behavior: 'always_invoice',
+        });
+      }
+    }
+
+    await sub.update({ planId });
+    const updated = await UserSubscription.findByPk(sub.id, {
+      include: [{ model: SubscriptionPlan, as: 'plan' }],
+    });
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ─── GET /payments/portal — Stripe Customer Portal ───────────────────────────
 
 router.get('/portal', requireAuth, async (req, res) => {

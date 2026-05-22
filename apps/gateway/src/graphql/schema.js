@@ -224,6 +224,7 @@ export const typeDefs = gql`
     createSubscription(planId: ID!): SubscriptionCheckoutResult!
     cancelSubscription: Boolean!
     resumeSubscription: UserSubscription!
+    updateSubscription(planId: ID!): UserSubscription!
 
     # ── Wallet ────────────────────────────────────────────────────────────────────
     """

@@ -221,7 +221,7 @@ async function main() {
   let stripe = null;
   const stripeKey = process.env.STRIPE_SECRET_KEY;
   if (stripeKey) {
-    stripe = (await import('stripe')).default(stripeKey);
+    stripe = new (await import('stripe')).default(stripeKey);
     console.log('Stripe configured — will create/reuse products and prices.');
   } else {
     console.log('No STRIPE_SECRET_KEY — skipping Stripe, saving DB rows only.');

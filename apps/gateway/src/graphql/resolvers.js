@@ -1508,6 +1508,15 @@ export const resolvers = {
       }
     },
 
+    updateSubscription: async (_, { planId }, { token, clients, logger }) => {
+      try {
+        return await clients.payments.changePlan(token, planId);
+      } catch (error) {
+        logger.warn(`updateSubscription failed: ${error.message}`);
+        throw error;
+      }
+    },
+
     // ── Trading mutations ─────────────────────────────────────────────────────
 
     initiateTrade: async (_, { userId, offeredCards, wantedCards, topUpAmount }, { token, clients, logger }) => {
