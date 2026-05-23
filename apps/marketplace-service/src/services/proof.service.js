@@ -32,7 +32,8 @@ export async function saveProofImage(listingId, sellerId, base64Data) {
   const filename = `mp_${listingId}_${sellerId}_${Date.now()}.jpg`;
   const filePath = join(PROOF_DIR, filename);
   await writeFile(filePath, buf);
-  return filePath;
+  // Return relative path so it can be served via /uploads/marketplace_proofs/<filename>
+  return `marketplace_proofs/${filename}`;
 }
 
 /**
