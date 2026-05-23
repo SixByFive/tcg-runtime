@@ -4,7 +4,7 @@
  *
  * Checks:
  * 1. Cards with no price observations in the last 30 days
- * 2. Price observations with NULL or zero market_price
+ * 2. Price observations with NULL or zero amount
  * 3. Orphaned variants (variant key exists in card_variants but no parent card)
  *
  * Runs: daily at 03:00
@@ -25,15 +25,15 @@ export async function verifyDataHealth({ logger: log = logger } = {}) {
     const [stale] = await sequelize.query(`
       SELECT COUNT(*) AS cnt FROM cards c
       WHERE NOT EXISTS (
-        SELECT 1 FROM price_observations po
-        WHERE po.card_id = c.id AND po.observed_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
+        SELECT 1 FROM m_price_observations po
+        WHERE po.card_id = c.id AND po.observed_at >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
       )
     `);
     report.staleCards = Number(stale[0]?.cnt ?? 0);
 
     // 2. Null/zero price observations
     const [nullPrices] = await sequelize.query(`
-      SELECT COUNT(*) AS cnt FROM price_observations WHERE market_price IS NULL OR market_price = 0
+      SELECT COUNT(*) AS cnt FROM m_price_observations WHERE amount IS NULL OR amount = 0
     `);
     report.nullPrices = Number(nullPrices[0]?.cnt ?? 0);
 

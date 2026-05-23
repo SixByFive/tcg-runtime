@@ -12,7 +12,7 @@ export default function defineCardListing(sequelize) {
       allowNull: false,
     },
     variant:  { type: DataTypes.STRING(80), allowNull: true },
-    price:    { type: DataTypes.DECIMAL(10, 4), allowNull: false },
+    price:    { type: DataTypes.DECIMAL(10, 4), allowNull: true },
     currency: { type: DataTypes.CHAR(3), defaultValue: 'GBP' },
     quantity: { type: DataTypes.INTEGER, defaultValue: 1 },
     status: {

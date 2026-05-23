@@ -952,7 +952,7 @@ export const typeDefs = gql`
     description: String
     condition: String!
     variant: String
-    price: Float!
+    price: Float
     currency: String
     quantity: Int
     shippingType: String

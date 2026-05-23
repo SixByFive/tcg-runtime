@@ -124,8 +124,9 @@ router.post('/', requireAuth, async (req, res) => {
     allowOffers, offerMinPrice, willTrade,
   } = req.body;
 
-  if (!cardId || !title || !condition || !price) {
-    return res.status(400).json({ error: 'cardId, title, condition, price are required' });
+  // price is optional only when the listing is trade-only (willTrade=true, no price)
+  if (!cardId || !title || !condition || (!price && !willTrade)) {
+    return res.status(400).json({ error: 'cardId, title, condition are required; price is required unless listing is trade-only' });
   }
 
   try {

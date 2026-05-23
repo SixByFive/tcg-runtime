@@ -6,21 +6,26 @@ import { Set } from '../models/index.js';
 // Maps tcgdex code → our internal abbreviation.
 export const ALIASES = Object.freeze({
   'me01': 'MEG',  'me02': 'PFL',   'me2.5': 'ASC',  'me03': 'POR',
+  'me04': 'CRI',
+
   'svp':  'SVP',  'sv01': 'SVI',   'sv02':  'PAL',   'sv03':  'OBF',
   'sv03.5': 'MEW','sv04': 'PAR',   'sv04.5':'PAF',   'sv05':  'TEF',
   'sv06': 'TWM',  'sv6.5':'SFA',   'sv07':  'SCR',   'sv08':  'SSP',
   'sv08.5':'PRE', 'sv09':'JTG',    'sv10':  'DRI',   'sv10.5b':'BLK',
   'sv10.5w':'WHT',
+
   'swshp':'SWSH', 'swsh1':'SSH',   'swsh2': 'RCL',   'swsh3': 'DAA',
   'swsh3.5':'CPA','swsh4':'VIV',   'swsh4.5':'SHF',  'swsh5': 'BST',
   'swsh6':'CRE',  'swsh7':'EVS',   'swsh8': 'FST',   'swsh9': 'BRS',
   'swsh10':'ASR', 'swsh10.5':'PGO','swsh11':'LOR',   'swsh12':'SIT',
   'swsh12.5':'CRZ','cel25':'CEL',  'fut2020':'FUT',
+
   'smp':  'SMP',  'sm1':  'SUM',   'sm2':   'GRI',   'sm3':   'BUS',
   'sm3.5':'SLG',  'sm4':  'CIN',   'sm5':   'UPR',   'sm6':   'FLI',
   'sm7':  'CES',  'sm7.5':'DRM',   'sm8':   'LOT',   'sm9':   'TEU',
   'sm10': 'UNB',  'sm11': 'UNM',   'sm12':  'CEC',   'det1':  'DET',
   'sm115':'HIF',  'sma':  'SMA',
+
   'xyp':  'XYP',  'xy0':  'KSS',   'xy1':   'XY',    'xy2':   'FLF',
   'xy3':  'FFI',  'xy4':  'PHF',   'xy5':   'PRC',   'dc1':   'DCR',
   'xy6':  'ROS',  'xy7':  'AOR',   'xy8':   'BKT',   'xy9':   'BKP',
@@ -29,11 +34,13 @@ export const ALIASES = Object.freeze({
   'bw4':  'NXD',  'bw5':  'DEX',   'bw6':   'DRX',   'dv1':   'DRV',
   'bw7':  'BCR',  'bw8':  'PLS',   'bw9':   'PLF',   'bw10':  'PLB',
   'bw11': 'LTR',  'rc':   'RC',
+
   'dpp':  'DPP',  'dp1':  'DP',    'dp2':   'MT',    'dp3':   'SW',
   'dp4':  'GE',   'dp5':  'MD',    'dp6':   'LA',    'dp7':   'SF',
   'pl1':  'PL',   'pl2':  'RR',    'pl3':   'SV',    'pl4':   'AR',
   'hgssp':'HSP',  'hgss1':'HS',    'hgss2': 'UL',    'hgss3': 'UD',
   'hgss4':'TM',   'col1': 'CL',
+  
   'ex1':  'RS',   'ex2':  'SS',    'ex3':   'DR',    'ex4':   'MA',
   'ex5':  'HL',   'ex6':  'RG',    'ex7':   'TRR',   'ex8':   'DX',
   'ex9':  'EM',   'ex10': 'UF',    'ex11':  'DS',    'ex12':  'LM',

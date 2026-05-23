@@ -240,6 +240,7 @@ export async function createApp({ logger }) {
   // reachable from the host via the gateway's published port.
   const CATALOG_URL = process.env.CATALOG_SERVICE_URL || 'http://localhost:4012';
   app.use('/catalog-admin', async (req, res) => {
+    if (req.url === '/ui') return res.redirect(302, '/catalog-admin/ui/');
     const target = `${CATALOG_URL}/admin${req.url === '/' ? '/ui/' : req.url}`;
     try {
       const upstream = await fetch(target, {

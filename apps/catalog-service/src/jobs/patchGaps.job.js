@@ -19,9 +19,10 @@ export async function patchGaps({ dryRun = false, logger: log = logger } = {}) {
   try {
     // Find combos that have at least 2 observations but gaps in between
     const [combos] = await sequelize.query(`
-      SELECT card_id, variant, currency, MIN(observed_date) AS first_date, MAX(observed_date) AS last_date,
-             COUNT(*) AS obs_count, DATEDIFF(MAX(observed_date), MIN(observed_date)) + 1 AS expected_days
-      FROM price_observations
+      SELECT card_id, variant, currency,
+             MIN(DATE(observed_at)) AS first_date, MAX(DATE(observed_at)) AS last_date,
+             COUNT(*) AS obs_count, DATEDIFF(MAX(DATE(observed_at)), MIN(DATE(observed_at))) + 1 AS expected_days
+      FROM m_price_observations
       GROUP BY card_id, variant, currency
       HAVING expected_days > obs_count
       LIMIT 5000
@@ -34,10 +35,10 @@ export async function patchGaps({ dryRun = false, logger: log = logger } = {}) {
 
       // Get all existing observations for this combo
       const [obs] = await sequelize.query(`
-        SELECT observed_date, market_price
-        FROM price_observations
+        SELECT DATE(observed_at) AS observed_date, amount AS market_price
+        FROM m_price_observations
         WHERE card_id = :cardId AND (variant = :variant OR (:variant IS NULL AND variant IS NULL)) AND currency = :currency
-        ORDER BY observed_date ASC
+        ORDER BY observed_at ASC
       `, { replacements: { cardId: card_id, variant: variant ?? null, currency } });
 
       if (obs.length < 2) continue;
@@ -58,7 +59,7 @@ export async function patchGaps({ dryRun = false, logger: log = logger } = {}) {
 
           if (!dryRun) {
             await sequelize.query(`
-              INSERT IGNORE INTO price_observations (card_id, variant, currency, observed_date, market_price, source)
+              INSERT IGNORE INTO m_price_observations (card_id, variant, currency, observed_at, amount, source)
               VALUES (:cardId, :variant, :currency, :gapDate, :price, 'gap_fill')
             `, { replacements: { cardId: card_id, variant: variant ?? null, currency, gapDate: gapDateStr, price: interpolatedPrice.toFixed(4) } });
           }
