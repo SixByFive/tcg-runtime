@@ -6,6 +6,7 @@ import cron from 'node-cron';
 import { v4 as uuid } from 'uuid';
 import { SchedulerTask } from '../models/index.js';
 import { ingestSet } from '../jobs/ingestSet.job.js';
+import { ingestBatch } from '../jobs/ingestBatch.job.js';
 import { collectPrices } from '../jobs/collectPrices.job.js';
 import { fxDaily } from '../jobs/fxDaily.job.js';
 import { rebuildPriceRollups } from '../jobs/rollup.job.js';
@@ -17,6 +18,7 @@ const logger = createLogger('scheduler');
 
 const JOBS = {
   ingestSet: (payload) => ingestSet(payload),
+  ingestBatch: (payload) => ingestBatch(payload),
   collectPrices: (payload) => collectPrices(payload),
   fxDaily: (payload) => fxDaily(payload),
   priceRollups: (payload) => rebuildPriceRollups(payload),

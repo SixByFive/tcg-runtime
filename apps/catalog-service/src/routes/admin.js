@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { Op } from 'sequelize';
 import { requireAdminKey } from '../middleware/requireAdminKey.js';
 import { Scheduler } from '../scheduler/index.js';
+import { seedStandardTasks, STANDARD_TASKS } from '../scheduler/seedTasks.js';
 import { ingestSet } from '../jobs/ingestSet.job.js';
 import { collectPrices } from '../jobs/collectPrices.job.js';
 import { fxDaily } from '../jobs/fxDaily.job.js';
@@ -88,6 +89,21 @@ router.delete('/scheduler/:id', async (req, res) => {
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
+});
+
+// POST /admin/scheduler/seed — seeds the standard ingest schedule (idempotent)
+router.post('/scheduler/seed', async (req, res) => {
+  try {
+    const result = await seedStandardTasks(Scheduler);
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /admin/scheduler/seed — preview what would be seeded
+router.get('/scheduler/seed', async (req, res) => {
+  res.json({ total: STANDARD_TASKS.length, tasks: STANDARD_TASKS });
 });
 
 // ---- Ad-hoc jobs ----
