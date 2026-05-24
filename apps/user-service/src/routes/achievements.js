@@ -34,10 +34,10 @@ router.get('/user/:userId', async (req, res) => {
 
 // POST /achievements/grant — admin: grant achievement to user
 router.post('/grant', requireAdmin, async (req, res) => {
-  const { userId, achievementId, data } = req.body;
+  const { userId, achievementId, data, meta } = req.body;
   if (!userId || !achievementId) return res.status(400).json({ error: 'userId and achievementId required' });
   try {
-    const [ua, created] = await UserAchievement.findOrCreate({ where: { userId, achievementId }, defaults: { userId, achievementId, data, earnedAt: new Date() } });
+    const [ua, created] = await UserAchievement.findOrCreate({ where: { userId, achievementId }, defaults: { userId, achievementId, meta: meta ?? data, earnedAt: new Date() } });
     res.status(created ? 201 : 200).json(ua);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

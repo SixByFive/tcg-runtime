@@ -5,7 +5,7 @@ export default function defineUserAchievement(sequelize) {
     userId:        { type: DataTypes.UUID, allowNull: false },
     achievementId: { type: DataTypes.UUID, allowNull: false },
     earnedAt:      { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
-    data:          { type: DataTypes.JSON, allowNull: true },
+    meta:          { type: DataTypes.JSON, allowNull: true },
   }, {
     tableName: 'user_achievements', timestamps: false,
     indexes: [{ unique: true, fields: ['userId', 'achievementId'] }],

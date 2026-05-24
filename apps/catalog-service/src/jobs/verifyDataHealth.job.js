@@ -39,7 +39,7 @@ export async function verifyDataHealth({ logger: log = logger } = {}) {
 
     // 3. Orphaned card variants
     const [orphans] = await sequelize.query(`
-      SELECT COUNT(*) AS cnt FROM card_variants cv WHERE NOT EXISTS (SELECT 1 FROM cards c WHERE c.id = cv.card_id)
+      SELECT COUNT(*) AS cnt FROM m_card_variants cv WHERE NOT EXISTS (SELECT 1 FROM cards c WHERE c.id = cv.card_id)
     `);
     report.orphanedVariants = Number(orphans[0]?.cnt ?? 0);
 

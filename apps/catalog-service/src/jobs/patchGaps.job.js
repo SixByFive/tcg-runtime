@@ -41,12 +41,14 @@ export async function patchGaps({ dryRun = false, logger: log = logger } = {}) {
         ORDER BY observed_at ASC
       `, { replacements: { cardId: card_id, variant: variant ?? null, currency } });
 
-      if (obs.length < 2) continue;
+      // Drop rows where amount was null
+      const validObs = obs.filter((o) => o.market_price != null && !isNaN(Number(o.market_price)));
+      if (validObs.length < 2) continue;
 
       // Find gaps and fill by linear interpolation
-      for (let i = 0; i < obs.length - 1; i++) {
-        const dateA = new Date(obs[i].observed_date);
-        const dateB = new Date(obs[i + 1].observed_date);
+      for (let i = 0; i < validObs.length - 1; i++) {
+        const dateA = new Date(validObs[i].observed_date);
+        const dateB = new Date(validObs[i + 1].observed_date);
         const diffDays = Math.round((dateB - dateA) / 86_400_000);
         if (diffDays <= 1) continue;
 
@@ -55,7 +57,7 @@ export async function patchGaps({ dryRun = false, logger: log = logger } = {}) {
           const gapDate = new Date(dateA.getTime() + d * 86_400_000);
           const gapDateStr = gapDate.toISOString().slice(0, 10);
           const t = d / diffDays;
-          const interpolatedPrice = obs[i].market_price + t * (obs[i + 1].market_price - obs[i].market_price);
+          const interpolatedPrice = Number(validObs[i].market_price) + t * (Number(validObs[i + 1].market_price) - Number(validObs[i].market_price));
 
           if (!dryRun) {
             await sequelize.query(`
