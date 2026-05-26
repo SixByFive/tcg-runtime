@@ -170,7 +170,7 @@ router.post('/bulk-add', requireAuth, async (req, res) => {
 
   const t = await sequelize.transaction();
   try {
-    const results = [];
+    const items = [];
     for (const { cardId, quantity = 1, condition, variation } of cards) {
       if (!cardId) continue;
 
@@ -186,9 +186,17 @@ router.post('/bulk-add', requireAuth, async (req, res) => {
       });
 
       if (entry) {
+        const previousQuantity = entry.quantity;
         entry.quantity += Number(quantity);
         if (condition !== undefined) entry.condition = condition;
         await entry.save({ transaction: t });
+        items.push({
+          cardId,
+          quantity: entry.quantity,
+          created: false,
+          previousQuantity,
+          newQuantity: entry.quantity,
+        });
       } else {
         entry = await Collection.create(
           {
@@ -201,12 +209,22 @@ router.post('/bulk-add', requireAuth, async (req, res) => {
           },
           { transaction: t },
         );
+        items.push({
+          cardId,
+          quantity: entry.quantity,
+          created: true,
+          previousQuantity: 0,
+          newQuantity: entry.quantity,
+        });
       }
-      results.push(entry);
     }
 
     await t.commit();
-    res.status(201).json({ added: results.length, entries: results });
+    res.status(201).json({
+      ok: true,
+      message: `Added ${items.length} item(s) to collection`,
+      items,
+    });
   } catch (err) {
     await t.rollback();
     res.status(500).json({ error: err.message });
