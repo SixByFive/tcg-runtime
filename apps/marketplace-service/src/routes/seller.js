@@ -1,6 +1,7 @@
 import { Router } from 'express';
+import { Op } from 'sequelize';
 import { requireAuth } from '../middleware/auth.js';
-import { SellerProfile, CardListing } from '../models/index.js';
+import { SellerProfile, CardListing, UserReputation } from '../models/index.js';
 import {
   createConnectOnboardingUrl,
   createConnectRefreshUrl,
@@ -150,6 +151,53 @@ router.get('/connect/complete', requireAuth, async (req, res) => {
       }
     }
     res.redirect(`${process.env.APP_URL}/seller/dashboard?connected=true`);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── GET /seller/:userId/reputation — public ─────────────────────────────────
+
+router.get('/:userId/reputation', async (req, res) => {
+  try {
+    const [rep] = await UserReputation.findOrCreate({
+      where:    { userId: req.params.userId },
+      defaults: { userId: req.params.userId },
+    });
+    res.json({
+      userId:               rep.userId,
+      score:                rep.score,
+      positive:             rep.positive,
+      negative:             rep.negative,
+      neutral:              rep.neutral,
+      completedMarketplace: rep.completedMarketplace,
+      flagged:              rep.flagged,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── GET /seller/:userId/reviews — public, paginated ─────────────────────────
+
+router.get('/:userId/reviews', async (req, res) => {
+  try {
+    const limit  = Math.min(Number(req.query.limit)  || 20, 50);
+    const offset = Number(req.query.offset) || 0;
+
+    const listings = await CardListing.findAll({
+      where: {
+        sellerId: req.params.userId,
+        rating:   { [Op.ne]: null },
+        [Op.or]:  [{ reviewStatus: null }, { reviewStatus: 'approved' }],
+      },
+      attributes: ['id', 'cardId', 'rating', 'review', 'updatedAt'],
+      order: [['updatedAt', 'DESC']],
+      limit,
+      offset,
+    });
+
+    res.json(listings);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

@@ -135,3 +135,27 @@ export async function setPrefs(token, prefs) {
     body: JSON.stringify(prefs),
   });
 }
+
+// ─── Web Push ─────────────────────────────────────────────────────────────────
+
+export async function getVapidPublicKey() {
+  const url = `${getBaseUrl()}/push/vapid-key`;
+  const res = await fetch(url, { method: 'GET' });
+  const data = await parseJson(res);
+  if (!res.ok) throw new Error(data?.error || 'Failed to get VAPID key');
+  return data?.publicKey ?? null;
+}
+
+export async function subscribeWebPush(token, { endpoint, keys, userAgent }) {
+  return authedRequest('/push/web/subscribe', token, {
+    method: 'POST',
+    body: JSON.stringify({ endpoint, keys, userAgent }),
+  });
+}
+
+export async function unsubscribeWebPush(token, endpoint) {
+  return authedRequest('/push/web/unsubscribe', token, {
+    method: 'POST',
+    body: JSON.stringify({ endpoint }),
+  });
+}

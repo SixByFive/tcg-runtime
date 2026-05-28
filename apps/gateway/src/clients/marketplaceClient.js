@@ -209,6 +209,38 @@ export async function leaveOrderFeedback(token, id, { rating, review }) {
   });
 }
 
+export async function disputeOrderReview(token, id, reason) {
+  return request(`/marketplace/orders/${encodeURIComponent(id)}/dispute-review`, {
+    method:  'POST',
+    headers: authHeaders(token),
+    body:    JSON.stringify({ reason: reason ?? null }),
+  });
+}
+
+export async function getAdminReviewQueue(token, { status, limit, offset } = {}) {
+  const params = new URLSearchParams();
+  if (status) params.set('status', status);
+  if (limit)  params.set('limit', String(limit));
+  if (offset) params.set('offset', String(offset));
+  return request(`/marketplace/admin/reviews?${params}`, { headers: authHeaders(token) });
+}
+
+export async function adminResolveReview(token, listingId, action) {
+  return request(`/marketplace/admin/reviews/${encodeURIComponent(listingId)}/resolve`, {
+    method:  'POST',
+    headers: authHeaders(token),
+    body:    JSON.stringify({ action }),
+  });
+}
+
+export async function getSellerReputation(userId) {
+  return request(`/marketplace/seller/${encodeURIComponent(userId)}/reputation`);
+}
+
+export async function getSellerReviews(userId, { limit = 20, offset = 0 } = {}) {
+  return request(`/marketplace/seller/${encodeURIComponent(userId)}/reviews?limit=${limit}&offset=${offset}`);
+}
+
 // ─── Seller ───────────────────────────────────────────────────────────────────
 
 export async function getSellerStatus(token) {
@@ -342,5 +374,23 @@ export async function adminUpdateProductListing(token, id, input) {
     method: 'PATCH',
     headers: authHeaders(token),
     body: JSON.stringify(input),
+  });
+}
+
+// ─── Bulk listing ─────────────────────────────────────────────────────────────
+
+export async function createBulkListings(token, listings) {
+  return request('/marketplace/listings/batch', {
+    method: 'POST',
+    headers: authHeaders(token),
+    body: JSON.stringify({ listings }),
+  });
+}
+
+export async function submitBulkProof(token, batchId, image) {
+  return request(`/marketplace/listings/batch/${encodeURIComponent(batchId)}/proof`, {
+    method: 'POST',
+    headers: authHeaders(token),
+    body: JSON.stringify({ image }),
   });
 }

@@ -292,6 +292,15 @@ export const resolvers = {
       }
     },
 
+    vapidPublicKey: async (_, __, { clients, logger }) => {
+      try {
+        return await clients.notifications?.getVapidPublicKey() ?? null;
+      } catch (error) {
+        logger.warn(`vapidPublicKey failed: ${error.message}`);
+        return null;
+      }
+    },
+
     myNotifications: async (_, { page = 1, pageSize = 20, filter }, { token, clients, logger }) => {
       try {
         return await clients.notifications?.getMyNotifications(token, { page, pageSize, filter })
@@ -356,6 +365,24 @@ export const resolvers = {
       } catch (error) {
         logger.warn(`order failed: ${error.message}`);
         return null;
+      }
+    },
+
+    sellerReputation: async (_, { userId }, { clients, logger }) => {
+      try {
+        return await clients.marketplace.getSellerReputation(userId);
+      } catch (error) {
+        logger.warn(`sellerReputation failed: ${error.message}`);
+        return null;
+      }
+    },
+
+    sellerReviews: async (_, { userId, limit, offset }, { clients, logger }) => {
+      try {
+        return await clients.marketplace.getSellerReviews(userId, { limit, offset });
+      } catch (error) {
+        logger.warn(`sellerReviews failed: ${error.message}`);
+        return [];
       }
     },
 
@@ -436,6 +463,15 @@ export const resolvers = {
         return await clients.marketplace.adminGetDisputes(token, status);
       } catch (error) {
         logger.warn(`adminOrderDisputes failed: ${error.message}`);
+        return [];
+      }
+    },
+
+    adminReviewQueue: async (_, { status, limit, offset }, { token, clients, logger }) => {
+      try {
+        return await clients.marketplace.getAdminReviewQueue(token, { status, limit, offset });
+      } catch (error) {
+        logger.warn(`adminReviewQueue failed: ${error.message}`);
         return [];
       }
     },
@@ -731,6 +767,16 @@ export const resolvers = {
       }
     },
 
+    adminWithdrawals: async (_, { status = 'pending', limit = 20, offset = 0 }, { token, clients, logger }) => {
+      if (!token) throw new Error('Not authenticated');
+      try {
+        return await clients.payments.adminListWithdrawals(token, { status, limit, offset });
+      } catch (error) {
+        logger.warn(`adminWithdrawals failed: ${error.message}`);
+        throw error;
+      }
+    },
+
     mySubscription: async (_, __, { token, clients, logger }) => {
       try {
         // payments-service returns { active, subscription } — unwrap to the sub object or null
@@ -744,7 +790,7 @@ export const resolvers = {
 
     myCapabilities: async (_, __, { token, clients, logger }) => {
       const FREE_DEFAULTS = {
-        planName: 'Free', platformFeePercent: 8,
+        planName: 'Free', platformFeePercent: 7,
         maxBinders: 3, maxCollectionCards: null, // collection is never capped
         maxActiveListings: 5, maxActiveTrades: 3, features: [],
       };
@@ -1045,6 +1091,26 @@ export const resolvers = {
       }
     },
 
+    subscribeWebPush: async (_, { endpoint, p256dh, auth, userAgent }, { token, clients, logger }) => {
+      try {
+        await clients.notifications?.subscribeWebPush(token, { endpoint, keys: { p256dh, auth }, userAgent });
+        return true;
+      } catch (error) {
+        logger.warn(`subscribeWebPush failed: ${error.message}`);
+        return false;
+      }
+    },
+
+    unsubscribeWebPush: async (_, { endpoint }, { token, clients, logger }) => {
+      try {
+        await clients.notifications?.unsubscribeWebPush(token, endpoint);
+        return true;
+      } catch (error) {
+        logger.warn(`unsubscribeWebPush failed: ${error.message}`);
+        return false;
+      }
+    },
+
     // ── Messaging ────────────────────────────────────────────────────────────────
 
     sendMessage: async (_, { receiverId, content, meta }, { token, clients, logger }) => {
@@ -1275,6 +1341,40 @@ export const resolvers = {
       }
     },
 
+    createBulkListings: async (_, { listings }, { token, clients, logger }) => {
+      try {
+        const data = await clients.marketplace.createBulkListings(token, listings);
+        return {
+          batchId:            data.batchId,
+          proofCode:          data.proofCode,
+          proofCodeExpiresAt: data.proofCodeExpiresAt ?? null,
+          count:              data.count,
+          listings:           data.listings ?? [],
+        };
+      } catch (error) {
+        logger.warn(`createBulkListings failed: ${error.message}`);
+        throw error;
+      }
+    },
+
+    submitBulkProof: async (_, { batchId, image }, { token, clients, logger }) => {
+      try {
+        const data = await clients.marketplace.submitBulkProof(token, batchId, image);
+        return {
+          ok:           data?.ok ?? true,
+          result:       data?.result ?? 'approved',
+          activated:    data?.activated ?? 0,
+          newProofCode: data?.newProofCode ?? null,
+        };
+      } catch (error) {
+        if (error.message?.includes('expired')) {
+          return { ok: false, result: 'expired', activated: 0, newProofCode: error.data?.newProofCode ?? null };
+        }
+        logger.warn(`submitBulkProof failed: ${error.message}`);
+        throw error;
+      }
+    },
+
     submitListingProof: async (_, { id, image }, { token, clients, logger }) => {
       try {
         const data = await clients.marketplace.submitListingProof(token, id, image);
@@ -1390,6 +1490,16 @@ export const resolvers = {
       }
     },
 
+    disputeOrderReview: async (_, { id, reason }, { token, clients, logger }) => {
+      try {
+        await clients.marketplace.disputeOrderReview(token, id, reason);
+        return true;
+      } catch (error) {
+        logger.warn(`disputeOrderReview failed: ${error.message}`);
+        return false;
+      }
+    },
+
     leaveOrderFeedback: async (_, { id, rating, review }, { token, clients, logger }) => {
       try {
         await clients.marketplace.leaveOrderFeedback(token, id, { rating, review });
@@ -1473,6 +1583,28 @@ export const resolvers = {
         return await clients.payments.requestWithdrawal(token, { amountPence, sortCode, accountNumber, accountName });
       } catch (error) {
         logger.warn(`requestWithdrawal failed: ${error.message}`);
+        throw error;
+      }
+    },
+
+    adminCompleteWithdrawal: async (_, { id }, { token, clients, logger }) => {
+      if (!token) throw new Error('Not authenticated');
+      try {
+        await clients.payments.adminCompleteWithdrawal(token, id);
+        return true;
+      } catch (error) {
+        logger.warn(`adminCompleteWithdrawal failed: ${error.message}`);
+        throw error;
+      }
+    },
+
+    adminRejectWithdrawal: async (_, { id, reason }, { token, clients, logger }) => {
+      if (!token) throw new Error('Not authenticated');
+      try {
+        await clients.payments.adminRejectWithdrawal(token, id, reason);
+        return true;
+      } catch (error) {
+        logger.warn(`adminRejectWithdrawal failed: ${error.message}`);
         throw error;
       }
     },
@@ -1722,6 +1854,16 @@ export const resolvers = {
         return true;
       } catch (error) {
         logger.warn(`adminResolveDispute failed: ${error.message}`);
+        throw error;
+      }
+    },
+
+    adminResolveReview: async (_, { listingId, action }, { token, clients, logger }) => {
+      try {
+        await clients.marketplace.adminResolveReview(token, listingId, action);
+        return true;
+      } catch (error) {
+        logger.warn(`adminResolveReview failed: ${error.message}`);
         throw error;
       }
     },
@@ -2057,7 +2199,11 @@ export const resolvers = {
       if (!obj.listingId) return null;
       try {
         return await clients.marketplace.getListing(obj.listingId);
-      } catch (e) { logger?.warn?.(`Order.listing failed: ${e.message}`); return null; }
+      } catch (e) {
+        // 404 = listing was sold/deleted, which is expected — don't spam warn logs
+        if (e.status !== 404) logger?.warn?.(`Order.listing failed: ${e.message}`);
+        return null;
+      }
     },
   },
 
@@ -2089,6 +2235,22 @@ export const resolvers = {
         return await clients.marketplace.getListing(id);
       } catch (e) {
         logger?.warn?.(`Offer.listing failed for ${id}: ${e.message}`);
+        return null;
+      }
+    },
+  },
+
+  UserProfile: {
+    planName: async (obj, _, { clients, logger }) => {
+      const userId = obj.userId ?? obj.user?.id ?? obj.id ?? null;
+      if (!userId) return null;
+      try {
+        const { getUserPlanName } = await import('../clients/paymentsClient.js');
+        const name = await getUserPlanName(userId);
+        // Return null for Free so the frontend can skip rendering a badge
+        return (name && name !== 'Free') ? name : null;
+      } catch (e) {
+        logger?.warn?.(`UserProfile.planName failed for ${userId}: ${e.message}`);
         return null;
       }
     },

@@ -41,18 +41,18 @@ export async function initModels() {
   ProductListing.hasOne(InventoryItem, { foreignKey: 'productListingId', as: 'inventory' });
   InventoryItem.belongsTo(ProductListing, { foreignKey: 'productListingId' });
 
-  const syncOpts = process.env.NODE_ENV === 'development'
-    ? { alter: true }
-    : { force: false };
-
-  await CardListing.sync(syncOpts);
-  await Offer.sync(syncOpts);
-  await Order.sync(syncOpts);
-  await OrderDispute.sync(syncOpts);
-  await SellerProfile.sync(syncOpts);
-  await ProductListing.sync(syncOpts);
-  await InventoryItem.sync(syncOpts);
-  await MarketplaceAgreement.sync(syncOpts);
+  // Use plain sync() in all environments — CREATE TABLE IF NOT EXISTS only.
+  // alter:true re-adds indexes and FK constraints on every restart, which
+  // causes ER_TOO_MANY_KEYS and FK constraint failures on tables with
+  // existing data. Migrations handle schema changes instead.
+  await CardListing.sync({ force: false });
+  await Offer.sync({ force: false });
+  await Order.sync({ force: false });
+  await OrderDispute.sync({ force: false });
+  await SellerProfile.sync({ force: false });
+  await ProductListing.sync({ force: false });
+  await InventoryItem.sync({ force: false });
+  await MarketplaceAgreement.sync({ force: false });
   // OwnershipRecord and UserReputation: cross-service, no sync
 
   initialized = true;

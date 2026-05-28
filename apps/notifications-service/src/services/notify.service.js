@@ -1,7 +1,17 @@
 import { Op } from 'sequelize';
+import webpush from 'web-push';
 import { createLogger } from '@sbf/logger';
-import { Notification, UserNotificationPref, PushToken } from '../models/index.js';
+import { Notification, UserNotificationPref, PushToken, WebPushSubscription } from '../models/index.js';
 import { sendNotificationEmail } from './email.service.js';
+
+// Configure VAPID once (no-op if keys not set)
+if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
+  webpush.setVapidDetails(
+    process.env.VAPID_SUBJECT || 'mailto:no-reply@sixbyfive.com',
+    process.env.VAPID_PUBLIC_KEY,
+    process.env.VAPID_PRIVATE_KEY,
+  );
+}
 
 const logger = createLogger('notifications-service:notify');
 
@@ -58,6 +68,50 @@ async function sendExpoPush(userId, { title, body, linkUrl, type }) {
     }
   } catch (err) {
     logger.error({ msg: 'expo_push_failed', userId, error: err.message });
+  }
+}
+
+/**
+ * Send Web Push notifications to all active browser subscriptions for a user.
+ * Fire-and-forget — errors are logged but never thrown.
+ */
+async function sendWebPush(userId, { title, body, linkUrl, type }) {
+  if (!process.env.VAPID_PUBLIC_KEY) return; // not configured
+
+  try {
+    const subs = await WebPushSubscription.findAll({
+      where: { userId, isActive: true },
+      limit: 25,
+    });
+    if (!subs.length) return;
+
+    const payload = JSON.stringify({ title, body, linkUrl: linkUrl ?? null, type: type ?? null });
+    const stale = [];
+
+    await Promise.allSettled(
+      subs.map(async (sub) => {
+        try {
+          await webpush.sendNotification(
+            { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+            payload,
+          );
+        } catch (err) {
+          // 404 / 410 = subscription no longer valid
+          if (err.statusCode === 404 || err.statusCode === 410) {
+            stale.push(sub.endpoint);
+          } else {
+            logger.warn({ msg: 'web_push_send_error', userId, error: err.message });
+          }
+        }
+      }),
+    );
+
+    if (stale.length) {
+      await WebPushSubscription.update({ isActive: false }, { where: { endpoint: stale } });
+      logger.info({ msg: 'web_push_subs_deactivated', userId, count: stale.length });
+    }
+  } catch (err) {
+    logger.error({ msg: 'web_push_failed', userId, error: err.message });
   }
 }
 
@@ -146,10 +200,11 @@ export async function notifyUser({
       }
     }
 
-    // Expo push (fire-and-forget, respects pushEnabled pref + quiet hours + silent flag)
+    // Push (Expo + Web) — fire-and-forget, respects pushEnabled pref + quiet hours + silent flag
     const pushOk = userId && !isSilent && !quiet && (!prefs || prefs.pushEnabled !== false);
     if (pushOk) {
       sendExpoPush(userId, { title, body, linkUrl, type });
+      sendWebPush(userId, { title, body, linkUrl, type });
     }
 
     return notification;

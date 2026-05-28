@@ -6,8 +6,9 @@ import {
   capturePaymentIntent, cancelPaymentIntent, refundPaymentIntent, createEscrowPaymentIntent,
 } from '../services/stripe.service.js';
 import { notifyUser, NotificationType } from '@sbf/contracts';
+import { recalcReputation } from '../services/reputation.service.js';
 
-const SHIPPING_SERVICE_URL = process.env.SHIPPING_SERVICE_URL || 'http://localhost:4026';
+const SHIPPING_SERVICE_URL = process.env.SHIPPING_SERVICE_URL || 'http://localhost:4023';
 const INTERNAL_KEY         = process.env.INTERNAL_API_KEY;
 
 async function bookShippingLabel({ orderId, sellerId, from, to, parcelSize, declaredValue }) {
@@ -86,11 +87,11 @@ router.post('/:id/ship', requireAuth, async (req, res) => {
     const order = await Order.findByPk(req.params.id);
     if (!order) return res.status(404).json({ error: 'Order not found' });
     if (order.sellerId !== req.user.sub) return res.status(403).json({ error: 'Not your order' });
-    if (order.paymentStatus !== 'authorised') {
-      return res.status(409).json({ error: 'Order must be authorised before shipping' });
+    if (!['authorised', 'paid', 'captured'].includes(order.paymentStatus)) {
+      return res.status(409).json({ error: 'Order must be paid before shipping' });
     }
-    if (order.fulfilmentStatus !== 'awaiting_shipment') {
-      return res.status(409).json({ error: 'Order is already shipped' });
+    if (!['awaiting_shipment', 'pending_dispatch', 'pending'].includes(order.fulfilmentStatus)) {
+      return res.status(409).json({ error: 'Order is already shipped or cannot be shipped in its current state' });
     }
 
     // ── Resolve buyer address (stored on order at purchase time)
@@ -152,7 +153,7 @@ router.post('/:id/ship', requireAuth, async (req, res) => {
       body:    label.trackingNumber
         ? `Tracking number: ${label.trackingNumber}${label.carrier ? ` via ${label.carrier}` : ''}`
         : 'Your order is on its way.',
-      linkUrl: `/orders/${order.id}`,
+      linkUrl: `/dashboard?view=orders`,
       meta:    { orderId: order.id, trackingNumber: label.trackingNumber },
     }).catch(() => {});
 
@@ -247,7 +248,7 @@ router.post('/:id/received', requireAuth, async (req, res) => {
       type:   NotificationType.INFO,
       title:  'Order complete — payment released',
       body:   'The buyer confirmed receipt. Your payment has been released.',
-      linkUrl: `/orders/${order.id}`,
+      linkUrl: `/dashboard?view=orders`,
       meta:   { orderId: order.id },
     }).catch(() => {});
 
@@ -289,7 +290,7 @@ router.post('/:id/dispute', requireAuth, async (req, res) => {
       type:   NotificationType.WARNING,
       title:  'A dispute has been raised',
       body:   `A dispute was raised on order ${order.id.slice(0, 8)}.`,
-      linkUrl: `/orders/${order.id}`,
+      linkUrl: `/dashboard?view=orders`,
     }).catch(() => {});
 
     res.status(201).json({ ok: true });
@@ -328,6 +329,12 @@ router.post('/:id/evidence', requireAuth, async (req, res) => {
   }
 });
 
+// ─── Feedback constants ───────────────────────────────────────────────────────
+
+const ANOMALY_WINDOW_HOURS = 24;
+const ANOMALY_THRESHOLD    = 3;   // negatives within window to trigger hold
+const MIN_ORDER_VALUE_GBP  = 1;   // orders below this cannot leave feedback
+
 // ─── POST /:id/feedback — buyer leaves feedback for seller ───────────────────
 
 router.post('/:id/feedback', requireAuth, async (req, res) => {
@@ -346,6 +353,11 @@ router.post('/:id/feedback', requireAuth, async (req, res) => {
       return res.status(409).json({ error: 'Order must be completed before leaving feedback' });
     }
 
+    // Minimum order value guard
+    if (Number(order.salePrice) < MIN_ORDER_VALUE_GBP) {
+      return res.status(409).json({ error: `Only orders of £${MIN_ORDER_VALUE_GBP}+ are eligible for feedback` });
+    }
+
     // Enforce 30-day feedback window
     const daysSinceCompletion = (Date.now() - new Date(order.completedAt).getTime()) / (1000 * 60 * 60 * 24);
     if (daysSinceCompletion > FEEDBACK_WINDOW_DAYS) {
@@ -355,23 +367,71 @@ router.post('/:id/feedback', requireAuth, async (req, res) => {
     const listing = await CardListing.findByPk(order.listingId);
     if (listing?.rating) return res.status(409).json({ error: 'Feedback already left for this order' });
 
-    // Map star rating to reputation bucket
-    let bucket;
-    if (rating >= 4) bucket = 'positive';
-    else if (rating === 3) bucket = 'neutral';
-    else bucket = 'negative';
+    // ── Anomaly detection: hold if 3+ negatives arrive within 24 hours ──────
+    const isNegative = rating <= 2;
+    let reviewStatus = null; // null = approved
 
-    // Update listing with rating
-    if (listing) await listing.update({ rating, review: review || null });
+    if (isNegative) {
+      const windowStart = new Date(Date.now() - ANOMALY_WINDOW_HOURS * 60 * 60 * 1000);
+      const recentNegatives = await CardListing.count({
+        where: {
+          sellerId: order.sellerId,
+          rating:   { [Op.lte]: 2 },
+          updatedAt: { [Op.gte]: windowStart },
+        },
+      });
 
-    // Update seller reputation
-    const [rep] = await UserReputation.findOrCreate({
-      where: { userId: order.sellerId },
-      defaults: { userId: order.sellerId },
-    });
-    await rep.increment(bucket);
-    await rep.reload();
-    await rep.update({ score: rep.positive - rep.negative });
+      if (recentNegatives + 1 >= ANOMALY_THRESHOLD) {
+        // Auto-hold this review and any un-held recent negatives from this window
+        await CardListing.update(
+          { reviewStatus: 'pending' },
+          {
+            where: {
+              sellerId:  order.sellerId,
+              rating:    { [Op.lte]: 2 },
+              updatedAt: { [Op.gte]: windowStart },
+              [Op.or]:   [{ reviewStatus: null }, { reviewStatus: 'approved' }],
+            },
+          },
+        );
+        reviewStatus = 'pending';
+      }
+    }
+
+    // Save feedback
+    if (listing) await listing.update({ rating, review: review || null, reviewStatus });
+
+    // Recalculate reputation from all approved reviews
+    await recalcReputation(order.sellerId);
+
+    res.json({ ok: true, held: reviewStatus === 'pending' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── POST /:id/dispute-review — seller flags a review as suspicious ───────────
+
+router.post('/:id/dispute-review', requireAuth, async (req, res) => {
+  const { reason } = req.body;
+  try {
+    const order = await Order.findByPk(req.params.id);
+    if (!order) return res.status(404).json({ error: 'Order not found' });
+    if (order.sellerId !== req.user.sub) return res.status(403).json({ error: 'Only the seller can dispute a review' });
+    if (order.fulfilmentStatus !== 'completed') {
+      return res.status(409).json({ error: 'Order is not completed' });
+    }
+
+    const listing = await CardListing.findByPk(order.listingId);
+    if (!listing?.rating) return res.status(404).json({ error: 'No review found for this order' });
+    if (['disputed', 'voided'].includes(listing.reviewStatus)) {
+      return res.status(409).json({ error: 'Review is already disputed or voided' });
+    }
+
+    await listing.update({ reviewStatus: 'disputed', disputeReason: reason || null });
+
+    // Recalculate — disputed review no longer counts
+    await recalcReputation(order.sellerId);
 
     res.json({ ok: true });
   } catch (err) {
@@ -443,7 +503,7 @@ router.post('/:id/cancel', requireAuth, async (req, res) => {
       type:   NotificationType.WARNING,
       title:  'Order cancelled',
       body:   reason || 'An order was cancelled.',
-      linkUrl: `/orders/${order.id}`,
+      linkUrl: `/dashboard?view=orders`,
     }).catch(() => {});
 
     res.json({ ok: true });

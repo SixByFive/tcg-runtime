@@ -11,7 +11,7 @@ export default function defineUserSubscription(sequelize) {
     userId:                 { type: DataTypes.UUID, allowNull: false },
     planId:                 { type: DataTypes.UUID, allowNull: false },
     status: {
-      type: DataTypes.ENUM('active', 'past_due', 'cancelled', 'expired', 'trialing'),
+      type: DataTypes.ENUM('active', 'past_due', 'cancelled', 'expired', 'trialing', 'pending'),
       defaultValue: 'active',
     },
     stripeCustomerId:       { type: DataTypes.STRING, allowNull: true },

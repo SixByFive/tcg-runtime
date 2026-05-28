@@ -1,5 +1,6 @@
 import { Router } from 'express';
-import { Op } from 'sequelize';
+import { Op }    from 'sequelize';
+import { randomUUID } from 'node:crypto';
 import { requireAuth } from '../middleware/auth.js';
 import {
   CardListing, Offer, Order, SellerProfile, OwnershipRecord, MarketplaceAgreement,
@@ -255,7 +256,12 @@ router.get('/:id', async (req, res) => {
       }
     }
 
-    res.json(listing);
+    // Count active offers for the "Under Offer" indicator
+    const pendingOfferCount = await Offer.count({
+      where: { listingId: listing.id, status: { [Op.in]: ['pending', 'countered'] } },
+    });
+
+    res.json({ ...listing.toJSON(), pendingOfferCount });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -331,8 +337,22 @@ router.post('/:id/proof', requireAuth, async (req, res) => {
       });
     }
 
+    // Fetch canonical card name + set name from catalog for OCR verification
+    let expectedCardName, expectedSetName;
+    try {
+      const catalogUrl = process.env.CATALOG_SERVICE_URL || 'http://localhost:4012';
+      const cardRes    = await fetch(`${catalogUrl}/cards/${encodeURIComponent(listing.cardId)}`);
+      if (cardRes.ok) {
+        const cardData   = await cardRes.json();
+        expectedCardName = cardData?.name ?? cardData?.card_name ?? undefined;
+        expectedSetName  = cardData?.Set?.name ?? cardData?.set?.name ?? cardData?.setName ?? undefined;
+      }
+    } catch {
+      // Non-fatal — if catalog is unreachable, OCR will skip card/set checks
+    }
+
     const imagePath = await saveProofImage(listing.id, req.user.sub, image);
-    const result    = await moderateProof(imagePath, listing.proofCode);
+    const result    = await moderateProof(imagePath, listing.proofCode, expectedCardName, expectedSetName);
 
     const updates = {
       proofImagePath:   imagePath,
@@ -359,7 +379,7 @@ router.post('/:id/proof', requireAuth, async (req, res) => {
         type:   NotificationType.INFO,
         title:  'Listing verified and live',
         body:   `Your listing "${listing.title}" has been verified and is now live.`,
-        linkUrl: `/listings/${listing.id}`,
+        linkUrl: `/marketplace/${listing.id}`,
       }).catch(() => {});
 
       triggerWishlistMatch(listing).catch(() => {});
@@ -370,7 +390,7 @@ router.post('/:id/proof', requireAuth, async (req, res) => {
         type:    NotificationType.INFO,
         title:   'Proof submitted — under review',
         body:    `Your proof photo for "${listing.title}" is being reviewed by a moderator. We'll let you know once it's approved.`,
-        linkUrl: `/listings/${listing.id}`,
+        linkUrl: `/marketplace/${listing.id}`,
       }).catch(() => {});
     }
 
@@ -611,6 +631,172 @@ router.post('/:id/buy', requireAuth, async (req, res) => {
 
     await order.reload();
     res.status(201).json({ ...order.toJSON(), clientSecret });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── POST /listings/batch — create multiple listings with one shared proof code ─
+
+router.post('/batch', requireAuth, async (req, res) => {
+  const { listings: items } = req.body;
+  if (!Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({ error: 'listings array is required' });
+  }
+  if (items.length > 50) {
+    return res.status(400).json({ error: 'Maximum 50 listings per batch' });
+  }
+
+  try {
+    // Enforce subscription listing limit for the whole batch at once
+    const caps = await checkCapabilities(req.user.sub);
+    if (caps.maxActiveListings !== null) {
+      const activeCount = await CardListing.count({
+        where: { sellerId: req.user.sub, status: { [Op.in]: ['ACTIVE', 'PENDING_PROOF'] } },
+      });
+      const available = caps.maxActiveListings - activeCount;
+      if (items.length > available) {
+        return res.status(403).json({
+          error: `Listing limit reached. You can add ${available} more listing(s) on your current plan.`,
+          limit:     caps.maxActiveListings,
+          current:   activeCount,
+          available,
+          plan:      caps.planName,
+        });
+      }
+    }
+
+    const sellerProfile  = await SellerProfile.findByPk(req.user.sub);
+    const stripeAccountId = sellerProfile?.stripeOnboardingComplete
+      ? sellerProfile.stripeAccountId
+      : null;
+
+    // All listings in the batch share one proof code
+    const batchId    = randomUUID();
+    const proofCode  = generateProofCode();
+    const proofExpiry = proofCodeExpiry();
+
+    const created = await Promise.all(
+      items
+        .filter((item) => item.cardId && item.title && item.condition)
+        .map((item) => CardListing.create({
+          sellerId:              req.user.sub,
+          cardId:                item.cardId,
+          title:                 item.title,
+          description:           item.description  || null,
+          condition:             item.condition,
+          variant:               item.variant       || null,
+          price:                 item.price         ?? null,
+          currency:              item.currency      || 'GBP',
+          quantity:              item.quantity      || 1,
+          status:                'PENDING_PROOF',
+          batchId,
+          proofCode,
+          proofCodeExpiresAt:    proofExpiry,
+          shippingType:          item.shippingType  || 'FIXED',
+          shippingPrice:         item.shippingType === 'FIXED' ? (item.shippingPrice ?? null) : null,
+          parcelSize:            item.parcelSize    || 'LARGE_LETTER',
+          labelPaidBy:           item.labelPaidBy   === 'buyer' ? 'buyer' : 'seller',
+          allowOffers:           item.allowOffers   !== false,
+          offerMinPrice:         item.offerMinPrice ?? null,
+          willTrade:             item.willTrade     === true,
+          sellerStripeAccountId: stripeAccountId,
+        })),
+    );
+
+    res.status(201).json({
+      batchId,
+      proofCode,
+      proofCodeExpiresAt: proofExpiry,
+      count:    created.length,
+      listings: created,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── POST /listings/batch/:batchId/proof — one photo activates entire batch ───
+
+router.post('/batch/:batchId/proof', requireAuth, async (req, res) => {
+  const { image } = req.body;
+  if (!image) return res.status(400).json({ error: 'image (base64) is required' });
+
+  try {
+    const listings = await CardListing.findAll({
+      where: {
+        batchId:  req.params.batchId,
+        sellerId: req.user.sub,
+        status:   'PENDING_PROOF',
+      },
+    });
+    if (!listings.length) {
+      return res.status(404).json({ error: 'No pending listings found for this batch' });
+    }
+
+    const proofCode = listings[0].proofCode;
+
+    // Regenerate if expired
+    if (listings[0].proofCodeExpiresAt && new Date(listings[0].proofCodeExpiresAt) < new Date()) {
+      const newCode   = generateProofCode();
+      const newExpiry = proofCodeExpiry();
+      await CardListing.update(
+        { proofCode: newCode, proofCodeExpiresAt: newExpiry },
+        { where: { batchId: req.params.batchId, sellerId: req.user.sub } },
+      );
+      return res.status(410).json({
+        error: 'Proof code expired — a new code has been generated. Re-photograph with the new code.',
+        newProofCode: newCode,
+      });
+    }
+
+    // Save photo + run OCR (code-only — too many cards in one photo for card name check)
+    const imagePath = await saveProofImage(req.params.batchId, req.user.sub, image);
+    const result    = await moderateProof(imagePath, proofCode);
+
+    const now = new Date();
+    const updates = {
+      proofImagePath:   imagePath,
+      proofUploadedAt:  now,
+      moderationResult: result,
+      moderatedAt:      result !== 'pending_admin' ? now : null,
+      ...(result === 'approved' ? { status: 'ACTIVE' } : {}),
+    };
+
+    await CardListing.update(updates, {
+      where: { batchId: req.params.batchId, sellerId: req.user.sub, status: 'PENDING_PROOF' },
+    });
+
+    if (result === 'approved') {
+      for (const listing of listings) {
+        await OwnershipRecord.create({
+          cardId:     listing.cardId,
+          ownerId:    listing.sellerId,
+          eventType:  'LISTING_VERIFIED',
+          sourceType: 'LISTING',
+          sourceId:   listing.id,
+          proofCode,
+        }).catch(() => {});
+        triggerWishlistMatch(listing).catch(() => {});
+      }
+      await notifyUser({
+        userId:  req.user.sub,
+        type:    NotificationType.INFO,
+        title:   `${listings.length} listing${listings.length !== 1 ? 's' : ''} verified and live`,
+        body:    `Your batch of ${listings.length} card${listings.length !== 1 ? 's' : ''} has been verified and is now live on the marketplace.`,
+        linkUrl: '/dashboard?view=selling',
+      }).catch(() => {});
+    } else {
+      await notifyUser({
+        userId:  req.user.sub,
+        type:    NotificationType.INFO,
+        title:   'Batch proof submitted — under review',
+        body:    `Your proof photo for ${listings.length} listing${listings.length !== 1 ? 's' : ''} is being reviewed by a moderator.`,
+        linkUrl: '/dashboard?view=selling',
+      }).catch(() => {});
+    }
+
+    res.json({ ok: true, result, activated: result === 'approved' ? listings.length : 0 });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

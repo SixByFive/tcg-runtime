@@ -64,7 +64,7 @@ router.post('/listings/:listingId/offers', requireAuth, async (req, res) => {
       type:   NotificationType.INFO,
       title:  'New offer on your listing',
       body:   `Someone offered £${Number(amount).toFixed(2)} on "${listing.title}"`,
-      linkUrl: `/listings/${listing.id}/offers`,
+      linkUrl: `/marketplace/${listing.id}/offers`,
       meta:   { offerId: offer.id, listingId: listing.id },
     }).catch(() => {});
 
@@ -139,7 +139,7 @@ router.post('/:id/respond', requireAuth, async (req, res) => {
         type:   NotificationType.WARNING,
         title:  'Offer declined',
         body:   `Your offer on "${listing.title}" was declined.`,
-        linkUrl: `/listings/${listing.id}`,
+        linkUrl: `/marketplace/${listing.id}`,
       }).catch(() => {});
       return res.json({ ok: true, status: 'declined' });
     }
@@ -153,7 +153,7 @@ router.post('/:id/respond', requireAuth, async (req, res) => {
         type:   NotificationType.INFO,
         title:  'Offer countered',
         body:   `"${listing.title}" — seller countered at £${Number(counterAmount).toFixed(2)}`,
-        linkUrl: `/listings/${listing.id}`,
+        linkUrl: `/marketplace/${listing.id}`,
       }).catch(() => {});
       return res.json({ ok: true, status: 'countered', counterAmount });
     }
@@ -215,7 +215,7 @@ router.post('/:id/respond', requireAuth, async (req, res) => {
       type:   NotificationType.INFO,
       title:  'Offer accepted!',
       body:   `Your offer on "${listing.title}" was accepted. Complete your purchase.`,
-      linkUrl: `/orders/${order.id}`,
+      linkUrl: `/dashboard?view=orders`,
       meta:   { orderId: order.id },
     }).catch(() => {});
 

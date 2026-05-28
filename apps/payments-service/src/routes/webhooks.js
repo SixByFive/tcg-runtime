@@ -63,7 +63,7 @@ router.post('/stripe', async (req, res) => {
             type:    NotificationType.SUBSCRIPTION,
             title:   `You're subscribed to ${plan?.name ?? 'a plan'}!`,
             body:    'Your subscription is now active. Enjoy your benefits.',
-            linkUrl: '/account/subscription',
+            linkUrl: '/account?tab=subscriptions',
           }).catch(() => {});
         }
 
@@ -139,8 +139,10 @@ router.post('/stripe', async (req, res) => {
         });
         if (!sub) break;
 
+        // Stripe uses 'canceled' (one-l); our ENUM uses 'cancelled' (two-l)
+        const mappedStatus = stripeSub.status === 'canceled' ? 'cancelled' : stripeSub.status;
         await sub.update({
-          status:             stripeSub.status,
+          status:             mappedStatus,
           cancelAtPeriodEnd:  stripeSub.cancel_at_period_end,
           currentPeriodStart: new Date(stripeSub.current_period_start * 1000),
           currentPeriodEnd:   new Date(stripeSub.current_period_end   * 1000),
@@ -181,7 +183,7 @@ router.post('/stripe', async (req, res) => {
           type:    NotificationType.PAYMENT_SUCCESS,
           title:   'Wallet topped up',
           body:    `£${(pi.amount / 100).toFixed(2)} has been added to your wallet.`,
-          linkUrl: '/account/wallet',
+          linkUrl: '/account?tab=wallet',
         }).catch(() => {});
         break;
       }

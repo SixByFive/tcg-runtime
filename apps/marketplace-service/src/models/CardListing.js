@@ -20,6 +20,9 @@ export default function defineCardListing(sequelize) {
       defaultValue: 'PENDING_PROOF',
     },
 
+    // Batch listing
+    batchId:            { type: DataTypes.UUID, allowNull: true },
+
     // Proof verification
     proofCode:          { type: DataTypes.STRING(20), allowNull: true },
     proofCodeExpiresAt: { type: DataTypes.DATE, allowNull: true },
@@ -56,6 +59,12 @@ export default function defineCardListing(sequelize) {
     sellerStripeAccountId: { type: DataTypes.STRING, allowNull: true },
     rating: { type: DataTypes.TINYINT, allowNull: true },
     review: { type: DataTypes.TEXT, allowNull: true },
+    // null = approved (default/legacy); 'pending' = anomaly hold; 'disputed' = seller flagged; 'voided' = admin rejected
+    reviewStatus: {
+      type: DataTypes.ENUM('pending', 'disputed', 'voided', 'approved'),
+      allowNull: true,
+    },
+    disputeReason: { type: DataTypes.TEXT, allowNull: true },
     soldAt: { type: DataTypes.DATE, allowNull: true },
   }, {
     tableName: 'card_listings',

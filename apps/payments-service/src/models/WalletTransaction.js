@@ -15,7 +15,14 @@ export default function defineWalletTransaction(sequelize) {
     id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
     userId: { type: DataTypes.UUID, allowNull: false },
     type: {
-      type: DataTypes.ENUM('topup', 'trade_hold', 'trade_credit', 'trade_refund', 'sale_credit', 'withdrawal'),
+      type: DataTypes.ENUM(
+        'topup',
+        'trade_hold', 'trade_credit', 'trade_refund', 'trade_debit',
+        'sale_credit',
+        'purchase_spend', 'purchase_refund',
+        'withdrawal',
+        'adjustment',
+      ),
       allowNull: false,
     },
     // Always a positive integer representing the absolute amount in pence.

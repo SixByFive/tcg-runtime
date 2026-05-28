@@ -87,7 +87,9 @@ router.post('/cancel', requireAuth, async (req, res) => {
     if (!sub) return res.status(404).json({ error: 'No active subscription found' });
     if (sub.cancelAtPeriodEnd) return res.status(409).json({ error: 'Already set to cancel' });
 
-    await cancelSubscription(sub.stripeSubscriptionId);
+    if (sub.stripeSubscriptionId) {
+      await cancelSubscription(sub.stripeSubscriptionId);
+    }
     await sub.update({ cancelAtPeriodEnd: true });
 
     res.json({ ok: true, message: 'Subscription will cancel at the end of the current billing period' });
@@ -105,7 +107,9 @@ router.post('/resume', requireAuth, async (req, res) => {
     });
     if (!sub) return res.status(404).json({ error: 'No subscription pending cancellation' });
 
-    await resumeSubscription(sub.stripeSubscriptionId);
+    if (sub.stripeSubscriptionId) {
+      await resumeSubscription(sub.stripeSubscriptionId);
+    }
     await sub.update({ cancelAtPeriodEnd: false });
 
     res.json({ ok: true });
@@ -170,6 +174,25 @@ router.get('/portal', requireAuth, async (req, res) => {
 
     const portal = await createPortalSession(sub.stripeCustomerId);
     res.json({ url: portal.url });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── GET /plan/:userId — public plan name lookup (no auth) ───────────────────
+
+router.get('/plan/:userId', async (req, res) => {
+  try {
+    const sub = await UserSubscription.findOne({
+      where: {
+        userId: req.params.userId,
+        status: { [Op.in]: ['active', 'trialing'] },
+      },
+      include: [{ model: SubscriptionPlan, as: 'plan' }],
+      order: [['createdAt', 'DESC']],
+    });
+    const planName = sub?.plan?.name ?? 'Free';
+    res.json({ planName });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

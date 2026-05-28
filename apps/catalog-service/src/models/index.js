@@ -38,11 +38,9 @@ export async function initModels() {
   Card.hasMany(CardVariant, { foreignKey: 'card_id', sourceKey: 'id' });
   CardVariant.belongsTo(Card, { foreignKey: 'card_id', targetKey: 'id' });
 
-  if (process.env.NODE_ENV === 'development') {
-    await sequelize.sync({ alter: true });
-  } else {
-    // In production, only create new tables that don't exist yet (never alter existing ones)
-    await SchedulerTask.sync({ force: false });
-    await PriceAlert.sync({ force: false });
-  }
+  // Use plain sync() in all environments — CREATE TABLE IF NOT EXISTS only.
+  // alter:true re-adds indexes on every restart and eventually hits MySQL's
+  // 64-key-per-table limit. Migrations handle schema changes instead.
+  await SchedulerTask.sync({ force: false });
+  await PriceAlert.sync({ force: false });
 }

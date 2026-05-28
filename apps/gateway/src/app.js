@@ -127,6 +127,44 @@ export async function createApp({ logger }) {
     }
   });
 
+  // ── Stripe webhook proxy ─────────────────────────────────────────────────
+  // MUST be before express.json() — Stripe signature verification requires
+  // the raw body bytes, not a parsed object.
+  const PAYMENTS_URL = process.env.PAYMENTS_SERVICE_URL || 'http://localhost:4019';
+
+  app.use('/webhooks/stripe', async (req, res) => {
+    const target = `${PAYMENTS_URL}/webhooks/stripe`;
+    try {
+      const body = await new Promise((resolve, reject) => {
+        const chunks = [];
+        req.on('data', (chunk) => chunks.push(chunk));
+        req.on('end',  () => resolve(Buffer.concat(chunks)));
+        req.on('error', reject);
+      });
+
+      const forwardHeaders = {
+        'content-type': req.headers['content-type'] || 'application/json',
+      };
+      if (req.headers['stripe-signature']) {
+        forwardHeaders['stripe-signature'] = req.headers['stripe-signature'];
+      }
+
+      const upstream = await fetch(target, {
+        method:  'POST',
+        headers: forwardHeaders,
+        body,
+      });
+
+      const contentType = upstream.headers.get('content-type') || '';
+      res.status(upstream.status);
+      if (contentType) res.setHeader('content-type', contentType);
+      res.send(await upstream.text());
+    } catch (err) {
+      logger.warn(`webhook proxy error: ${err.message}`);
+      res.status(502).json({ error: 'payments-service unavailable' });
+    }
+  });
+
   app.use(express.json({ limit: '10mb' }));
 
   app.get('/health', (_req, res) => {
@@ -211,8 +249,6 @@ export async function createApp({ logger }) {
 
   // ── Checkout proxy ───────────────────────────────────────────────────────
   // Forwards /checkout/* → payments-service /payments/*
-  const PAYMENTS_URL = process.env.PAYMENTS_SERVICE_URL || 'http://localhost:4019';
-
   app.use('/checkout', async (req, res) => {
     const target = `${PAYMENTS_URL}/payments${req.url === '/' ? '' : req.url}`;
     try {

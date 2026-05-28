@@ -9,6 +9,39 @@ const logger = createLogger('payments-service:wallet');
 const MIN_TOPUP_PENCE = 500;   // £5 minimum
 const MAX_TOPUP_PENCE = 20000; // £200 maximum per transaction
 
+// ─── Discord alerts ───────────────────────────────────────────────────────────
+
+async function alertDiscordWithdrawal({ userId, amountPence, sortCode, accountNumber, accountName }) {
+  const webhookUrl = process.env.DISCORD_WITHDRAWAL_WEBHOOK_URL;
+  if (!webhookUrl) return;
+
+  const fmt = (p) => `£${(p / 100).toFixed(2)}`;
+  const sc  = String(sortCode).replace(/(\d{2})(\d{2})(\d{2})/, '$1-$2-$3');
+
+  const body = JSON.stringify({
+    embeds: [{
+      title:       '💸 New Withdrawal Request',
+      description: 'A user has requested a bank withdrawal. Send the payment in Monzo then mark it complete in the admin panel.',
+      color:       0x3B82F6, // blue-500
+      fields: [
+        { name: 'Amount',         value: `**${fmt(amountPence)}**`, inline: true  },
+        { name: 'Account name',   value: accountName || '—',        inline: true  },
+        { name: '​',         value: '​',                  inline: true  },
+        { name: 'Sort code',      value: `\`${sc}\``,               inline: true  },
+        { name: 'Account number', value: `\`${accountNumber}\``,    inline: true  },
+        { name: 'User ID',        value: `\`${userId}\``,           inline: false },
+      ],
+      timestamp: new Date().toISOString(),
+    }],
+  });
+
+  try {
+    await fetch(webhookUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+  } catch (err) {
+    logger.warn({ msg: 'discord_webhook_failed', error: err.message });
+  }
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 async function getOrCreateBalance(userId, transaction) {
@@ -183,6 +216,91 @@ export async function requestWithdrawal(userId, amountPence, bankDetails = {}) {
   });
 
   logger.info(`Withdrawal requested: user=${userId} ${amountPence}p → ${nameLabel}`);
+
+  // Fire Discord alert (fire-and-forget)
+  alertDiscordWithdrawal({
+    userId,
+    amountPence,
+    sortCode:      sortDigits,
+    accountNumber: accountNumber.trim(),
+    accountName:   accountName?.trim() || null,
+  }).catch(() => {});
+
+  return formatTx(tx);
+}
+
+// ─── Admin withdrawal management ─────────────────────────────────────────────
+
+/**
+ * List withdrawal transactions for the admin queue.
+ */
+export async function adminListWithdrawals({ status = 'pending', limit = 20, offset = 0 } = {}) {
+  const where = { type: 'withdrawal' };
+  if (status !== 'all') where.status = status;
+
+  const { rows, count } = await WalletTransaction.findAndCountAll({
+    where,
+    order:  [['createdAt', 'DESC']],
+    limit:  Math.min(limit, 100),
+    offset,
+  });
+
+  return {
+    total: count,
+    withdrawals: rows.map((tx) => ({
+      ...formatTx(tx),
+      userId:       tx.userId,
+      sortCode:     tx.metadataJson?.sortCode      || null,
+      accountNumber: tx.metadataJson?.accountNumber || null,
+      accountName:  tx.metadataJson?.accountName   || null,
+    })),
+  };
+}
+
+/**
+ * Mark a withdrawal as completed (admin confirmed the bank transfer was sent).
+ */
+export async function adminCompleteWithdrawal(txId) {
+  const tx = await WalletTransaction.findOne({ where: { id: txId, type: 'withdrawal' } });
+  if (!tx) throw new Error('Withdrawal not found');
+  if (tx.status === 'completed') return formatTx(tx); // idempotent
+  if (tx.status !== 'pending')   throw new Error(`Cannot complete a withdrawal with status: ${tx.status}`);
+
+  await tx.update({ status: 'completed' });
+  logger.info(`Withdrawal completed: id=${txId} user=${tx.userId} ${tx.amountPence}p`);
+  return formatTx(tx);
+}
+
+/**
+ * Reject a withdrawal — refund the deducted balance back to the user.
+ */
+export async function adminRejectWithdrawal(txId, reason) {
+  const tx = await WalletTransaction.findOne({ where: { id: txId, type: 'withdrawal' } });
+  if (!tx) throw new Error('Withdrawal not found');
+  if (tx.status === 'failed') return formatTx(tx); // idempotent
+  if (tx.status !== 'pending') throw new Error(`Cannot reject a withdrawal with status: ${tx.status}`);
+
+  await sequelize.transaction(async (t) => {
+    await tx.update({
+      status:      'failed',
+      description: `Withdrawal rejected${reason ? `: ${reason}` : ''}`,
+    }, { transaction: t });
+
+    // Refund the balance that was deducted on request
+    const wallet = await getOrCreateBalance(tx.userId, t);
+    await wallet.increment('balancePence', { by: tx.amountPence, transaction: t });
+
+    await WalletTransaction.create({
+      userId:      tx.userId,
+      type:        'adjustment',
+      amountPence: tx.amountPence,
+      currency:    'GBP',
+      status:      'completed',
+      description: `Withdrawal refunded${reason ? ` (${reason})` : ''}`,
+    }, { transaction: t });
+  });
+
+  logger.info(`Withdrawal rejected + refunded: id=${txId} user=${tx.userId} ${tx.amountPence}p`);
   return formatTx(tx);
 }
 

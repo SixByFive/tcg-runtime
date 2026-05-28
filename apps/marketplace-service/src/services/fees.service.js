@@ -3,7 +3,7 @@ import { createLogger } from '@sbf/logger';
 const logger = createLogger('marketplace-service:fees');
 
 // Free-tier default — matches payments-service seed data
-const FREE_TIER_FEE_PCT = 8;
+const FREE_TIER_FEE_PCT = 7;
 
 /**
  * Returns the platform fee percentage for a seller based on their subscription.

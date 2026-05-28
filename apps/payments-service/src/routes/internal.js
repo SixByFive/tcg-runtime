@@ -82,7 +82,7 @@ router.get('/capabilities/:userId', async (req, res) => {
     if (!sub?.plan) {
       return res.json({
         planName:           'Free',
-        platformFeePercent: 8,
+        platformFeePercent: 7,
         maxBinders:         3,
         maxCollectionCards: 500,
         maxActiveListings:  5,

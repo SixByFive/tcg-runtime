@@ -344,7 +344,7 @@ router.post('/:id/proof', async (req, res) => {
     }
 
     const imagePath = await saveProofImage(trade.id, req.user.sub, proofImage);
-    const modResult = moderateProof(imagePath, proofCode);
+    const modResult = await moderateProof(imagePath, proofCode);
     const approved  = modResult === 'approved';
 
     const proof = await TradeProof.create({

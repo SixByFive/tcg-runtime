@@ -9,6 +9,7 @@ import subscriptionsRouter from './routes/subscriptions.js';
 import checkoutRouter      from './routes/checkout.js';
 import transactionsRouter  from './routes/transactions.js';
 import walletRouter        from './routes/wallet.js';
+import adminWalletRouter   from './routes/adminWallet.js';
 import internalRouter      from './routes/internal.js';
 import webhooksRouter      from './routes/webhooks.js';
 
@@ -36,8 +37,9 @@ app.use('/payments/plans',         plansRouter);
 app.use('/payments/subscription',  subscriptionsRouter);
 app.use('/payments/checkout',      checkoutRouter);
 app.use('/payments/transactions',  transactionsRouter);
-app.use('/payments/wallet',        walletRouter);
-app.use('/internal',               internalRouter);
+app.use('/payments/wallet',              walletRouter);
+app.use('/payments/admin/withdrawals',   adminWalletRouter);
+app.use('/internal',                     internalRouter);
 app.use('/webhooks',               webhooksRouter);
 
 // ─── Error handler ────────────────────────────────────────────────────────────

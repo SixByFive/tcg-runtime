@@ -144,7 +144,7 @@ export async function checkCapabilities(userId) {
   const key = process.env.INTERNAL_API_KEY;
   const FREE_DEFAULTS = {
     planName: 'Free',
-    platformFeePercent: 8,
+    platformFeePercent: 7,
     maxBinders: 3,
     maxCollectionCards: 500,
     maxActiveListings: 5,

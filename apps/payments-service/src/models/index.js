@@ -24,9 +24,10 @@ export async function initModels() {
   UserSubscription.belongsTo(SubscriptionPlan, { foreignKey: 'planId', as: 'plan' });
   SubscriptionPlan.hasMany(UserSubscription,   { foreignKey: 'planId', as: 'subscriptions' });
 
-  const syncOpts = process.env.NODE_ENV === 'development'
-    ? { alter: true }
-    : { force: false };
+  // In development use plain sync() — CREATE TABLE IF NOT EXISTS only.
+  // alter:true re-adds indexes on every restart and eventually hits MySQL's
+  // 64-key-per-table limit. Migrations handle schema changes instead.
+  const syncOpts = { force: false };
 
   await SubscriptionPlan.sync(syncOpts);
   await UserSubscription.sync(syncOpts);

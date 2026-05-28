@@ -40,7 +40,7 @@ export async function runUnreadReminderJob() {
         type:    NotificationType.MESSAGE,
         title:   `You have ${msgs.length} unread message${msgs.length > 1 ? 's' : ''}`,
         body:    'You have unread messages waiting for you.',
-        linkUrl: '/messages',
+        linkUrl: '#messenger',
         isSilent: false,
       });
 

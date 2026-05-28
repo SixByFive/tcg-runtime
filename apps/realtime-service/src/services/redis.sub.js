@@ -16,9 +16,20 @@ export function startRedisSubscriber({ push, broadcast }) {
   const sub = new Redis(process.env.REDIS_URL || 'redis://localhost:6379', {
     lazyConnect: false,
     maxRetriesPerRequest: null,
+    // In dev, back off quickly rather than hammering every 100ms
+    retryStrategy: (times) => Math.min(times * 500, 10_000),
   });
 
-  sub.on('error', (err) => logger.error(`Redis error: ${err.message}`));
+  // Log only the first connection failure — subsequent retries are silent
+  let errLogged = false;
+  sub.on('error', (err) => {
+    if (!errLogged) {
+      logger.warn(`Redis unavailable (${err.message}) — real-time push disabled until Redis is running`);
+      errLogged = true;
+    }
+  });
+  // Reset the flag when connection recovers so any future outage is logged once
+  sub.on('connect', () => { errLogged = false; });
 
   sub.psubscribe('realtime:*', (err, count) => {
     if (err) {

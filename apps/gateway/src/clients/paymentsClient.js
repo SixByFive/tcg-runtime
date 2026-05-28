@@ -69,7 +69,7 @@ export async function getMyCapabilities(userId) {
   const key = process.env.INTERNAL_API_KEY;
   const FREE_DEFAULTS = {
     planName: 'Free',
-    platformFeePercent: 8,
+    platformFeePercent: 7,
     maxBinders: 3,
     maxCollectionCards: null, // unlimited — collection is never capped
     maxActiveListings: 5,
@@ -87,6 +87,15 @@ export async function getMyCapabilities(userId) {
 }
 
 // ─── Subscriptions ────────────────────────────────────────────────────────────
+
+export async function getUserPlanName(userId) {
+  try {
+    const data = await request(`/payments/subscription/plan/${encodeURIComponent(userId)}`);
+    return data?.planName ?? 'Free';
+  } catch {
+    return 'Free';
+  }
+}
 
 export async function getMySubscription(token) {
   return request('/payments/subscription', {
@@ -236,5 +245,30 @@ export async function requestWithdrawal(token, { amountPence, sortCode, accountN
     method: 'POST',
     headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
     body: JSON.stringify({ amountPence, sortCode, accountNumber, accountName }),
+  });
+}
+
+// ─── Admin withdrawals ────────────────────────────────────────────────────────
+
+export async function adminListWithdrawals(token, { status = 'pending', limit = 20, offset = 0 } = {}) {
+  const p = new URLSearchParams({ status, limit: String(limit), offset: String(offset) });
+  return request(`/payments/admin/withdrawals?${p.toString()}`, {
+    headers: authHeaders(token),
+  });
+}
+
+export async function adminCompleteWithdrawal(token, id) {
+  return request(`/payments/admin/withdrawals/${encodeURIComponent(id)}/complete`, {
+    method: 'POST',
+    headers: authHeaders(token),
+    body: JSON.stringify({}),
+  });
+}
+
+export async function adminRejectWithdrawal(token, id, reason) {
+  return request(`/payments/admin/withdrawals/${encodeURIComponent(id)}/reject`, {
+    method: 'POST',
+    headers: authHeaders(token),
+    body: JSON.stringify({ reason }),
   });
 }

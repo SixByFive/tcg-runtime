@@ -21,8 +21,8 @@ app.use(rateLimit({ windowMs: 60_000, max: 100 }));
 
 app.get('/health', (_req, res) => res.json({ status: 'ok', service: serviceName }));
 
-app.use('/shipping',  shippingRouter);
-app.use('/internal',  internalRouter);
+app.use('/shipping',           shippingRouter);
+app.use('/internal/shipping',  internalRouter);
 
 app.use((err, _req, res, _next) => {
   logger.error(err.message);

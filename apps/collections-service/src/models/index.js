@@ -39,21 +39,14 @@ export async function initModels() {
   BinderSlot.belongsTo(BinderPage, { foreignKey: 'pageId' });
   BinderSlot.belongsTo(Card, { foreignKey: 'cardId', targetKey: 'id', as: 'card', constraints: false });
 
-  if (process.env.NODE_ENV === 'development') {
-    // Sync only our writable tables, never the catalog's m_cards
-    await Collection.sync({ alter: true });
-    await Wishlist.sync({ alter: true });
-    await Binder.sync({ alter: true });
-    await BinderPage.sync({ alter: true });
-    await BinderSlot.sync({ alter: true });
-  } else {
-    // Production: create tables if missing, never alter
-    await Collection.sync({ force: false });
-    await Wishlist.sync({ force: false });
-    await Binder.sync({ force: false });
-    await BinderPage.sync({ force: false });
-    await BinderSlot.sync({ force: false });
-  }
+  // Use plain sync() in all environments — CREATE TABLE IF NOT EXISTS only.
+  // alter:true re-adds indexes on every restart and eventually hits MySQL's
+  // 64-key-per-table limit. Migrations handle schema changes instead.
+  await Collection.sync({ force: false });
+  await Wishlist.sync({ force: false });
+  await Binder.sync({ force: false });
+  await BinderPage.sync({ force: false });
+  await BinderSlot.sync({ force: false });
 
   initialized = true;
 }

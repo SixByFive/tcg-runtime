@@ -1,6 +1,16 @@
 import { Router } from 'express';
+import webpush from 'web-push';
 import { requireAuth } from '@sbf/auth';
-import { PushToken } from '../models/index.js';
+import { PushToken, WebPushSubscription } from '../models/index.js';
+
+// ─── VAPID setup ─────────────────────────────────────────────────────────────
+if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
+  webpush.setVapidDetails(
+    process.env.VAPID_SUBJECT || 'mailto:no-reply@sixbyfive.com',
+    process.env.VAPID_PUBLIC_KEY,
+    process.env.VAPID_PRIVATE_KEY,
+  );
+}
 
 const router = Router();
 router.use(requireAuth);
@@ -94,6 +104,64 @@ router.get('/tokens', async (req, res) => {
       attributes: ['id', 'platform', 'deviceName', 'appVersion', 'createdAt'],
     });
     res.json(tokens);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── Web Push (VAPID) ────────────────────────────────────────────────────────
+
+// GET /push/vapid-key — return the public VAPID key so the browser can subscribe
+router.get('/vapid-key', (req, res) => {
+  const key = process.env.VAPID_PUBLIC_KEY;
+  if (!key) return res.status(503).json({ error: 'Web push not configured' });
+  res.json({ publicKey: key });
+});
+
+// POST /push/web/subscribe — save a PushSubscription from the browser
+router.post('/web/subscribe', async (req, res) => {
+  const { endpoint, keys, userAgent } = req.body;
+  if (!endpoint || !keys?.p256dh || !keys?.auth) {
+    return res.status(400).json({ error: 'endpoint, keys.p256dh and keys.auth are required' });
+  }
+
+  try {
+    const [record, created] = await WebPushSubscription.findOrCreate({
+      where: { endpoint },
+      defaults: {
+        userId:    req.user.sub,
+        endpoint,
+        p256dh:    keys.p256dh,
+        auth:      keys.auth,
+        userAgent: userAgent || null,
+        isActive:  true,
+      },
+    });
+    if (!created) {
+      await record.update({
+        userId:    req.user.sub,
+        p256dh:    keys.p256dh,
+        auth:      keys.auth,
+        userAgent: userAgent || null,
+        isActive:  true,
+      });
+    }
+    res.status(created ? 201 : 200).json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /push/web/unsubscribe — remove a web push subscription by endpoint
+router.post('/web/unsubscribe', async (req, res) => {
+  const { endpoint } = req.body;
+  if (!endpoint) return res.status(400).json({ error: 'endpoint is required' });
+
+  try {
+    const deleted = await WebPushSubscription.destroy({
+      where: { endpoint, userId: req.user.sub },
+    });
+    res.json({ ok: true, removed: deleted > 0 });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

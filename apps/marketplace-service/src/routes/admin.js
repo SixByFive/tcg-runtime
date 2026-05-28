@@ -7,6 +7,7 @@ import {
   capturePaymentIntent, cancelPaymentIntent, refundPaymentIntent,
 } from '../services/stripe.service.js';
 import { notifyUser, NotificationType } from '@sbf/contracts';
+import { recalcReputation } from '../services/reputation.service.js';
 
 import { Op, fn, col, literal } from 'sequelize';
 
@@ -99,7 +100,7 @@ router.post('/listings/:id/approve-proof', async (req, res) => {
       type:   NotificationType.INFO,
       title:  'Listing manually verified',
       body:   `Your listing "${listing.title}" was reviewed and approved by a moderator.`,
-      linkUrl: `/listings/${listing.id}`,
+      linkUrl: `/marketplace/${listing.id}`,
     }).catch(() => {});
 
     triggerWishlistMatch(listing).catch(() => {});
@@ -137,7 +138,7 @@ router.post('/listings/:id/reject-proof', async (req, res) => {
       type:   NotificationType.WARNING,
       title:  'Proof photo rejected — please resubmit',
       body:   reason || 'Your proof photo was unclear. A new code has been generated — please re-photograph your card.',
-      linkUrl: `/listings/${listing.id}`,
+      linkUrl: `/marketplace/${listing.id}`,
     }).catch(() => {});
 
     res.json({ ok: true, newProofCode: newCode });
@@ -484,6 +485,76 @@ router.post('/disputes/:id/resolve', async (req, res) => {
     }
 
     res.json({ ok: true, escrowActionTaken: escrowAction });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── GET /admin/reviews — review moderation queue ─────────────────────────────
+// ?status=pending|disputed  (default: both)
+
+router.get('/reviews', async (req, res) => {
+  try {
+    const statusFilter = req.query.status;
+    const validStatuses = ['pending', 'disputed'];
+    const whereStatus = validStatuses.includes(statusFilter)
+      ? [statusFilter]
+      : validStatuses;
+
+    const limit  = Math.min(Number(req.query.limit) || 50, 200);
+    const offset = Number(req.query.offset) || 0;
+
+    const reviews = await CardListing.findAll({
+      where: {
+        rating:       { [Op.ne]: null },
+        reviewStatus: { [Op.in]: whereStatus },
+      },
+      attributes: ['id', 'sellerId', 'cardId', 'rating', 'review', 'reviewStatus', 'disputeReason', 'updatedAt'],
+      order: [['updatedAt', 'DESC']],
+      limit,
+      offset,
+    });
+
+    res.json(reviews);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── POST /admin/reviews/:listingId/resolve — approve or void a review ────────
+
+router.post('/reviews/:listingId/resolve', async (req, res) => {
+  const { action } = req.body; // 'approve' | 'void'
+  if (!['approve', 'void'].includes(action)) {
+    return res.status(400).json({ error: 'action must be approve or void' });
+  }
+
+  try {
+    const listing = await CardListing.findByPk(req.params.listingId);
+    if (!listing)         return res.status(404).json({ error: 'Listing not found' });
+    if (!listing.rating)  return res.status(404).json({ error: 'No review on this listing' });
+    if (!['pending', 'disputed'].includes(listing.reviewStatus)) {
+      return res.status(409).json({ error: 'Review is not pending resolution' });
+    }
+
+    const newStatus = action === 'approve' ? 'approved' : 'voided';
+    await listing.update({ reviewStatus: newStatus });
+
+    // Recalculate seller reputation
+    await recalcReputation(listing.sellerId);
+
+    // Notify seller if review was voided (they win the dispute)
+    if (newStatus === 'voided' && listing.reviewStatus === 'disputed') {
+      await notifyUser({
+        userId: listing.sellerId,
+        type:   NotificationType.INFO,
+        title:  'Review removed',
+        body:   'A disputed review has been removed from your profile after admin review.',
+        linkUrl: `/dashboard?view=orders`,
+      }).catch(() => {});
+    }
+
+    res.json({ ok: true, reviewStatus: newStatus });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

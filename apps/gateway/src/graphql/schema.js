@@ -46,6 +46,7 @@ export const typeDefs = gql`
     myNotifications(page: Int, pageSize: Int, filter: NotificationFilterInput): NotificationPage!
     unreadNotificationCount: Int!
     myNotificationPrefs: NotificationPrefs!
+    vapidPublicKey: String
 
     # ── Price Alerts ──────────────────────────────────────────────────────────────
     myPriceAlerts: [PriceAlert!]!
@@ -70,6 +71,8 @@ export const typeDefs = gql`
     order(id: ID!): Order
     sellerStatus: SellerStatus!
     sellerAddress: SellerAddress!
+    sellerReputation(userId: ID!): SellerReputation
+    sellerReviews(userId: ID!, limit: Int, offset: Int): [SellerReview!]!
     listingOffers(listingId: ID!): [Offer!]!
     myOffers: [Offer!]!
     myIncomingOffers: [Offer!]!
@@ -88,6 +91,7 @@ export const typeDefs = gql`
 
     # ── Wallet ────────────────────────────────────────────────────────────────────
     myWallet(limit: Int, offset: Int): Wallet!
+    adminWithdrawals(status: String, limit: Int, offset: Int): AdminWithdrawalList!
 
     # ── Trading Admin ──────────────────────────────────────────────────────────────
     adminTrades(page: Int, pageSize: Int, status: TradeStatus, userId: ID): [Trade!]!
@@ -99,6 +103,7 @@ export const typeDefs = gql`
     adminOrders(paymentStatus: String, fulfilmentStatus: String, limit: Int, offset: Int): [Order!]!
     adminProofQueue: [CardListing!]!
     adminOrderDisputes(status: String): [OrderDispute!]!
+    adminReviewQueue(status: String, limit: Int, offset: Int): [ReviewQueueItem!]!
 
     # ── Subscription / Revenue Admin ──────────────────────────────────────────────
     adminSubscriptions(status: String, page: Int, pageSize: Int): AdminSubscriptionPage!
@@ -197,6 +202,8 @@ export const typeDefs = gql`
       quietStart: String
       quietEnd: String
     ): Boolean
+    subscribeWebPush(endpoint: String!, p256dh: String!, auth: String!, userAgent: String): Boolean
+    unsubscribeWebPush(endpoint: String!): Boolean
 
     # ── Messaging ────────────────────────────────────────────────────────────────
     sendMessage(receiverId: ID!, content: String!, meta: JSON): Message!
@@ -240,6 +247,8 @@ export const typeDefs = gql`
     amountPence must be a positive integer. Minimum £10 (1000p).
     """
     requestWithdrawal(amountPence: Int!, sortCode: String!, accountNumber: String!, accountName: String): WithdrawalRequest!
+    adminCompleteWithdrawal(id: ID!): Boolean!
+    adminRejectWithdrawal(id: ID!, reason: String): Boolean!
 
     # ── Trading ───────────────────────────────────────────────────────────────────
     initiateTrade(userId: ID!, offeredCards: [TradeCardInput!], wantedCards: [TradeCardInput!], topUpAmount: Float): Trade!
@@ -262,6 +271,8 @@ export const typeDefs = gql`
     # ── Marketplace ───────────────────────────────────────────────────────────────
     createListing(input: CreateListingInput!): CardListing!
     updateListing(id: ID!, input: UpdateListingInput!): CardListing!
+    createBulkListings(listings: [BulkListingItemInput!]!): BulkListingResult!
+    submitBulkProof(batchId: ID!, image: String!): BulkProofResult!
     deleteListing(id: ID!): Boolean!
     submitListingProof(id: ID!, image: String!): SubmitProofResult!
     createOrderFromListing(input: CreateOrderFromListingInput!): Order!
@@ -271,6 +282,7 @@ export const typeDefs = gql`
     raiseOrderDispute(id: ID!, reason: String!): Order!
     cancelOrder(id: ID!, reason: String): Order!
     leaveOrderFeedback(id: ID!, rating: Int!, review: String): Boolean!
+    disputeOrderReview(id: ID!, reason: String): Boolean!
     connectStripe: StripeConnectResult!
     updateSellerAddress(input: SellerAddressInput!): Boolean!
     createOffer(listingId: ID!, amount: Float!, message: String): Offer!
@@ -295,6 +307,7 @@ export const typeDefs = gql`
     adminApproveProof(id: ID!): Boolean!
     adminRejectProof(id: ID!, reason: String): Boolean!
     adminResolveDispute(id: ID!, resolution: String!, resolvedInFavourOf: String!): Boolean!
+    adminResolveReview(listingId: ID!, action: String!): Boolean!
     adminCancelSubscription(id: ID!): Boolean!
     adminResumeSubscription(id: ID!): Boolean!
     adminChangePlan(id: ID!, planId: ID!): Boolean!
@@ -437,6 +450,7 @@ export const typeDefs = gql`
     wantsTrade: Boolean
     wantsMarketplace: Boolean
     user: User
+    planName: String
   }
 
   """Minimal public user shape returned by search."""
@@ -747,6 +761,8 @@ export const typeDefs = gql`
     proofCode: String
     moderationResult: String
     proofImagePath: String
+    rating: Int
+    pendingOfferCount: Int
     createdAt: String
     updatedAt: String
     cardInfo: CardInfo
@@ -811,6 +827,34 @@ export const typeDefs = gql`
     updatedAt: String
   }
 
+  type ReviewQueueItem {
+    id: ID!
+    sellerId: ID!
+    cardId: String
+    rating: Int!
+    review: String
+    reviewStatus: String!
+    disputeReason: String
+    updatedAt: String
+  }
+
+  type SellerReputation {
+    userId: ID!
+    score: Int!
+    positive: Int!
+    negative: Int!
+    neutral: Int!
+    completedMarketplace: Int!
+    flagged: Boolean!
+  }
+
+  type SellerReview {
+    cardId: String
+    rating: Int!
+    review: String
+    createdAt: String
+  }
+
   type SellerStatus {
     connected: Boolean!
     complete: Boolean!
@@ -867,6 +911,39 @@ export const typeDefs = gql`
     ok: Boolean!
     result: String!
     newProofCode: String
+  }
+
+  type BulkListingResult {
+    batchId: ID!
+    proofCode: String!
+    proofCodeExpiresAt: String
+    count: Int!
+    listings: [CardListing!]!
+  }
+
+  type BulkProofResult {
+    ok: Boolean!
+    result: String!
+    activated: Int!
+    newProofCode: String
+  }
+
+  input BulkListingItemInput {
+    cardId: String!
+    title: String!
+    description: String
+    condition: String!
+    variant: String
+    price: Float
+    currency: String
+    quantity: Int
+    shippingType: String
+    shippingPrice: Float
+    parcelSize: String
+    labelPaidBy: String
+    allowOffers: Boolean
+    offerMinPrice: Float
+    willTrade: Boolean
   }
 
   type Offer {
@@ -1302,6 +1379,25 @@ export const typeDefs = gql`
     status: String!
     description: String
     createdAt: String
+  }
+
+  """A withdrawal record as seen by the admin (includes bank details)."""
+  type AdminWithdrawal {
+    id: ID!
+    userId: ID!
+    amountPence: Int!
+    amount: Float!
+    status: String!
+    description: String
+    sortCode: String
+    accountNumber: String
+    accountName: String
+    createdAt: String
+  }
+
+  type AdminWithdrawalList {
+    total: Int!
+    withdrawals: [AdminWithdrawal!]!
   }
 
   type PaymentTransaction {
