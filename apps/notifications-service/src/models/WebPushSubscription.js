@@ -40,7 +40,9 @@ export default function defineWebPushSubscription(sequelize) {
     timestamps: true,
     indexes: [
       { fields: ['userId'] },
-      { fields: ['endpoint'], unique: true },
+      // TEXT columns require a prefix length for indexing in MySQL.
+      // 500-char prefix is ample for any real-world push endpoint URL.
+      { fields: [{ name: 'endpoint', length: 500 }], unique: true },
     ],
   });
 }

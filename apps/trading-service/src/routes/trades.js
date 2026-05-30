@@ -207,7 +207,7 @@ router.post('/', checkNotBanned, initiateMinuteLimiter, initiateDayLimiter, asyn
     const full = await Trade.findOne(tradeWith(trade.id));
     res.status(201).json(full);
   } catch (err) {
-    await t.rollback();
+    if (!t.finished) await t.rollback().catch(() => {});
     res.status(500).json({ error: err.message });
   }
 });
@@ -221,10 +221,10 @@ router.post('/:id/respond', async (req, res) => {
   const t = await sequelize.transaction();
   try {
     const trade = await Trade.findByPk(req.params.id, { transaction: t, lock: t.LOCK.UPDATE });
-    if (!trade) { await t.rollback(); return res.status(404).json({ error: 'Trade not found' }); }
-    if (!isParty(trade, req.user.sub)) { await t.rollback(); return res.status(403).json({ error: 'Forbidden' }); }
+    if (!trade) { if (!t.finished) await t.rollback().catch(() => {}); return res.status(404).json({ error: 'Trade not found' }); }
+    if (!isParty(trade, req.user.sub)) { if (!t.finished) await t.rollback().catch(() => {}); return res.status(403).json({ error: 'Forbidden' }); }
     if (!RESPONDABLE.has(trade.status)) {
-      await t.rollback();
+      if (!t.finished) await t.rollback().catch(() => {});
       return res.status(409).json({ error: `Cannot respond to a trade with status ${trade.status}` });
     }
 
@@ -286,7 +286,7 @@ router.post('/:id/respond', async (req, res) => {
     const full = await Trade.findOne(tradeWith(trade.id));
     res.json(full);
   } catch (err) {
-    await t.rollback();
+    if (!t.finished) await t.rollback().catch(() => {});
     res.status(500).json({ error: err.message });
   }
 });
@@ -297,10 +297,10 @@ router.post('/:id/cancel', async (req, res) => {
   const t = await sequelize.transaction();
   try {
     const trade = await Trade.findByPk(req.params.id, { transaction: t, lock: t.LOCK.UPDATE });
-    if (!trade) { await t.rollback(); return res.status(404).json({ error: 'Trade not found' }); }
-    if (!isParty(trade, req.user.sub)) { await t.rollback(); return res.status(403).json({ error: 'Forbidden' }); }
+    if (!trade) { if (!t.finished) await t.rollback().catch(() => {}); return res.status(404).json({ error: 'Trade not found' }); }
+    if (!isParty(trade, req.user.sub)) { if (!t.finished) await t.rollback().catch(() => {}); return res.status(403).json({ error: 'Forbidden' }); }
     if (!CANCELLABLE.has(trade.status)) {
-      await t.rollback();
+      if (!t.finished) await t.rollback().catch(() => {});
       return res.status(409).json({ error: `Cannot cancel a trade with status ${trade.status}` });
     }
 
@@ -322,7 +322,7 @@ router.post('/:id/cancel', async (req, res) => {
 
     res.json(await Trade.findOne(tradeWith(trade.id)));
   } catch (err) {
-    await t.rollback();
+    if (!t.finished) await t.rollback().catch(() => {});
     res.status(500).json({ error: err.message });
   }
 });
@@ -336,10 +336,10 @@ router.post('/:id/proof', async (req, res) => {
   const t = await sequelize.transaction();
   try {
     const trade = await Trade.findByPk(req.params.id, { transaction: t, lock: t.LOCK.UPDATE });
-    if (!trade) { await t.rollback(); return res.status(404).json({ error: 'Trade not found' }); }
-    if (!isParty(trade, req.user.sub)) { await t.rollback(); return res.status(403).json({ error: 'Forbidden' }); }
+    if (!trade) { if (!t.finished) await t.rollback().catch(() => {}); return res.status(404).json({ error: 'Trade not found' }); }
+    if (!isParty(trade, req.user.sub)) { if (!t.finished) await t.rollback().catch(() => {}); return res.status(403).json({ error: 'Forbidden' }); }
     if (!['AGREED', 'PROOF_PENDING'].includes(trade.status)) {
-      await t.rollback();
+      if (!t.finished) await t.rollback().catch(() => {});
       return res.status(409).json({ error: `Trade must be AGREED or PROOF_PENDING to upload proof (current: ${trade.status})` });
     }
 
@@ -399,7 +399,7 @@ router.post('/:id/proof', async (req, res) => {
 
     res.status(201).json({ proof, trade: await Trade.findOne(tradeWith(trade.id)) });
   } catch (err) {
-    await t.rollback();
+    if (!t.finished) await t.rollback().catch(() => {});
     res.status(500).json({ error: err.message });
   }
 });
@@ -413,10 +413,10 @@ router.post('/:id/tracking', async (req, res) => {
   const t = await sequelize.transaction();
   try {
     const trade = await Trade.findByPk(req.params.id, { transaction: t, lock: t.LOCK.UPDATE });
-    if (!trade) { await t.rollback(); return res.status(404).json({ error: 'Trade not found' }); }
-    if (!isParty(trade, req.user.sub)) { await t.rollback(); return res.status(403).json({ error: 'Forbidden' }); }
+    if (!trade) { if (!t.finished) await t.rollback().catch(() => {}); return res.status(404).json({ error: 'Trade not found' }); }
+    if (!isParty(trade, req.user.sub)) { if (!t.finished) await t.rollback().catch(() => {}); return res.status(403).json({ error: 'Forbidden' }); }
     if (trade.status !== 'LOCKED') {
-      await t.rollback();
+      if (!t.finished) await t.rollback().catch(() => {});
       return res.status(409).json({ error: 'Trade must be LOCKED to submit tracking' });
     }
 
@@ -437,7 +437,7 @@ router.post('/:id/tracking', async (req, res) => {
 
     res.json(await Trade.findOne(tradeWith(trade.id)));
   } catch (err) {
-    await t.rollback();
+    if (!t.finished) await t.rollback().catch(() => {});
     res.status(500).json({ error: err.message });
   }
 });
@@ -448,10 +448,10 @@ router.post('/:id/confirm', async (req, res) => {
   const t = await sequelize.transaction();
   try {
     const trade = await Trade.findByPk(req.params.id, { transaction: t, lock: t.LOCK.UPDATE });
-    if (!trade) { await t.rollback(); return res.status(404).json({ error: 'Trade not found' }); }
-    if (!isParty(trade, req.user.sub)) { await t.rollback(); return res.status(403).json({ error: 'Forbidden' }); }
+    if (!trade) { if (!t.finished) await t.rollback().catch(() => {}); return res.status(404).json({ error: 'Trade not found' }); }
+    if (!isParty(trade, req.user.sub)) { if (!t.finished) await t.rollback().catch(() => {}); return res.status(403).json({ error: 'Forbidden' }); }
     if (trade.status !== 'IN_TRANSIT') {
-      await t.rollback();
+      if (!t.finished) await t.rollback().catch(() => {});
       return res.status(409).json({ error: 'Trade must be IN_TRANSIT to confirm receipt' });
     }
 
@@ -493,7 +493,7 @@ router.post('/:id/confirm', async (req, res) => {
 
     res.json(await Trade.findOne(tradeWith(trade.id)));
   } catch (err) {
-    await t.rollback();
+    if (!t.finished) await t.rollback().catch(() => {});
     res.status(500).json({ error: err.message });
   }
 });
@@ -507,10 +507,10 @@ router.post('/:id/dispute', async (req, res) => {
   const t = await sequelize.transaction();
   try {
     const trade = await Trade.findByPk(req.params.id, { transaction: t, lock: t.LOCK.UPDATE });
-    if (!trade) { await t.rollback(); return res.status(404).json({ error: 'Trade not found' }); }
-    if (!isParty(trade, req.user.sub)) { await t.rollback(); return res.status(403).json({ error: 'Forbidden' }); }
+    if (!trade) { if (!t.finished) await t.rollback().catch(() => {}); return res.status(404).json({ error: 'Trade not found' }); }
+    if (!isParty(trade, req.user.sub)) { if (!t.finished) await t.rollback().catch(() => {}); return res.status(403).json({ error: 'Forbidden' }); }
     if (!DISPUTABLE.has(trade.status)) {
-      await t.rollback();
+      if (!t.finished) await t.rollback().catch(() => {});
       return res.status(409).json({ error: `Cannot raise a dispute on a trade with status ${trade.status}` });
     }
 
@@ -531,7 +531,7 @@ router.post('/:id/dispute', async (req, res) => {
 
     res.status(201).json({ dispute, trade: await Trade.findOne(tradeWith(trade.id)) });
   } catch (err) {
-    await t.rollback();
+    if (!t.finished) await t.rollback().catch(() => {});
     res.status(500).json({ error: err.message });
   }
 });
