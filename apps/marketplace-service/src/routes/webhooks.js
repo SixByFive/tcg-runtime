@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { Order, SellerProfile } from '../models/index.js';
+import { Order, SellerProfile, CardListing } from '../models/index.js';
 import { constructWebhookEvent } from '../services/stripe.service.js';
 import { notifyUser, NotificationType } from '@sbf/contracts';
 import { createLogger } from '@sbf/logger';
@@ -100,6 +100,16 @@ router.post('/stripe', async (req, res) => {
           }).catch((e) => logger.warn(`wallet refund on payment_failed: ${e.message}`));
         }
 
+        // Relist — payment never completed so the card was never sold
+        if (order.listingId) {
+          const listing = await CardListing.findByPk(order.listingId);
+          if (listing && listing.status === 'SOLD') {
+            await listing.update({ status: 'ACTIVE', soldAt: null });
+          } else if (listing && listing.status === 'ACTIVE') {
+            await listing.increment('quantity');
+          }
+        }
+
         await notifyUser({
           userId:  order.buyerId,
           type:    NotificationType.WARNING,
@@ -115,8 +125,20 @@ router.post('/stripe', async (req, res) => {
       case 'payment_intent.canceled': {
         const pi    = event.data.object;
         const order = await Order.findOne({ where: { stripePaymentIntentId: pi.id } });
-        if (order && order.paymentStatus !== 'cancelled') {
+        if (!order) break;
+
+        if (order.paymentStatus !== 'cancelled') {
           await order.update({ paymentStatus: 'cancelled' });
+        }
+
+        // Relist — PI was voided before any capture, card was never sold
+        if (order.listingId) {
+          const listing = await CardListing.findByPk(order.listingId);
+          if (listing && listing.status === 'SOLD') {
+            await listing.update({ status: 'ACTIVE', soldAt: null });
+          } else if (listing && listing.status === 'ACTIVE') {
+            await listing.increment('quantity');
+          }
         }
         break;
       }
