@@ -163,7 +163,7 @@ const PLANS = [
     maxActiveListings: null,
     maxActiveTrades: null,
     featuresJson: [
-      'Seller profile & storefront',
+      'Unlimited listings & trades',
       'Inventory tools & bulk import',
       'List-from-collection (1-click)',
       'Order management & shipping labels',
@@ -186,7 +186,7 @@ const PLANS = [
     maxActiveListings: null,
     maxActiveTrades: null,
     featuresJson: [
-      'Seller profile & storefront',
+      'Unlimited listings & trades',
       'Inventory tools & bulk import',
       'List-from-collection (1-click)',
       'Order management & shipping labels',
