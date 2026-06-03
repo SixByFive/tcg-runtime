@@ -9,10 +9,11 @@ import defineUserReputation  from './UserReputation.js';
 import defineProductListing  from './ProductListing.js';
 import defineInventoryItem   from './InventoryItem.js';
 import defineMarketplaceAgreement from './MarketplaceAgreement.js';
+import defineUserProfile from './UserProfile.js';
 
 export let CardListing, Offer, Order, OrderDispute, SellerProfile, OwnershipRecord, UserReputation;
 export let ProductListing, InventoryItem;
-export let MarketplaceAgreement;
+export let MarketplaceAgreement, UserProfile;
 export let sequelize;
 
 let initialized = false;
@@ -31,6 +32,7 @@ export async function initModels() {
   ProductListing       = defineProductListing(sequelize);
   InventoryItem        = defineInventoryItem(sequelize);
   MarketplaceAgreement = defineMarketplaceAgreement(sequelize);
+  UserProfile          = defineUserProfile(sequelize);         // cross-service, no sync
 
   // Associations
   CardListing.hasMany(Offer,  { foreignKey: 'listingId', as: 'offers' });

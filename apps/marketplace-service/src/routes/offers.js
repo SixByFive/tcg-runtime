@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { requireAuth } from '../middleware/auth.js';
-import { CardListing, Offer, Order, SellerProfile } from '../models/index.js';
+import { CardListing, Offer, Order, SellerProfile, UserProfile } from '../models/index.js';
 import { createEscrowPaymentIntent } from '../services/stripe.service.js';
 import { calculateFeeForSeller } from '../services/fees.service.js';
 import { notifyUser, NotificationType } from '@sbf/contracts';
@@ -168,6 +168,22 @@ router.post('/:id/respond', requireAuth, async (req, res) => {
     // Use the seller's subscription tier for their platform fee rate
     const feePence   = await calculateFeeForSeller(agreedPricePence, listing.sellerId);
 
+    // Resolve buyer address: request body → offer snapshot → live profile lookup
+    let resolvedAddress = buyerAddress || offer.buyerAddressJson || null;
+    if (!resolvedAddress) {
+      const profile = await UserProfile.findOne({ where: { userId: offer.buyerId } });
+      if (profile?.address1) {
+        resolvedAddress = {
+          line1:    profile.address1,
+          line2:    profile.address2 || undefined,
+          city:     profile.city,
+          postcode: profile.postcode,
+          state:    profile.state || undefined,
+          country:  profile.country || 'GB',
+        };
+      }
+    }
+
     const order = await Order.create({
       listingId:   listing.id,
       buyerId:     offer.buyerId,
@@ -179,7 +195,7 @@ router.post('/:id/respond', requireAuth, async (req, res) => {
       shippingCost: shippingPence / 100,
       totalAmount: totalPence / 100,
       currency:    listing.currency || 'GBP',
-      buyerAddressJson: buyerAddress || null,
+      buyerAddressJson: resolvedAddress,
       sellerStripeAccountId: listing.sellerStripeAccountId,
       paymentStatus: 'pending',
     });

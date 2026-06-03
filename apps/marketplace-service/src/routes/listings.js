@@ -1,9 +1,11 @@
 import { Router } from 'express';
 import { Op }    from 'sequelize';
 import { randomUUID } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
+import { join, basename } from 'node:path';
 import { requireAuth } from '../middleware/auth.js';
 import {
-  CardListing, Offer, Order, SellerProfile, OwnershipRecord, MarketplaceAgreement,
+  CardListing, Offer, Order, SellerProfile, OwnershipRecord, MarketplaceAgreement, UserProfile,
 } from '../models/index.js';
 
 const MARKETPLACE_RULES = [
@@ -109,7 +111,20 @@ router.get('/', async (req, res) => {
       offset: (page - 1) * pageSize,
     });
 
-    res.json({ listings: rows, total: count, page, pageSize });
+    // Batch-fetch pending offer counts for all returned listings
+    const listingIds = rows.map((r) => r.id);
+    const offerCounts = listingIds.length
+      ? await Offer.findAll({
+          where: { listingId: { [Op.in]: listingIds }, status: { [Op.in]: ['pending', 'countered'] } },
+          attributes: ['listingId', [Offer.sequelize.fn('COUNT', Offer.sequelize.col('id')), 'cnt']],
+          group: ['listingId'],
+          raw: true,
+        })
+      : [];
+    const countMap = Object.fromEntries(offerCounts.map((r) => [r.listingId, Number(r.cnt)]));
+    const listings = rows.map((r) => ({ ...r.toJSON(), pendingOfferCount: countMap[r.id] ?? 0 }));
+
+    res.json({ listings, total: count, page, pageSize });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -228,6 +243,101 @@ router.get('/mine', requireAuth, async (req, res) => {
     });
 
     res.json({ listings: rows, total: count, page, pageSize });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── Listing-scoped offer routes (gateway calls /marketplace/listings/:id/offers) ─
+
+router.get('/:id/offers', requireAuth, async (req, res) => {
+  try {
+    const listing = await CardListing.findByPk(req.params.id);
+    if (!listing) return res.status(404).json({ error: 'Listing not found' });
+    if (listing.sellerId !== req.user.sub) return res.status(403).json({ error: 'Not your listing' });
+    const offers = await Offer.findAll({
+      where: { listingId: req.params.id },
+      order: [['createdAt', 'DESC']],
+    });
+    res.json(offers);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/:id/offers', requireAuth, async (req, res) => {
+  const { amount, message } = req.body;
+  if (!amount || isNaN(amount)) return res.status(400).json({ error: 'amount is required' });
+  try {
+    const listing = await CardListing.findByPk(req.params.id);
+    if (!listing) return res.status(404).json({ error: 'Listing not found' });
+    if (listing.status !== 'ACTIVE') return res.status(409).json({ error: 'Listing is not active' });
+    if (listing.sellerId === req.user.sub) return res.status(403).json({ error: 'Cannot offer on your own listing' });
+    if (!listing.allowOffers) return res.status(409).json({ error: 'This listing does not accept offers' });
+    if (listing.offerMinPrice && Number(amount) < Number(listing.offerMinPrice)) {
+      return res.status(400).json({ error: `Minimum offer is £${listing.offerMinPrice}` });
+    }
+    await Offer.update(
+      { status: 'expired' },
+      { where: { listingId: listing.id, buyerId: req.user.sub, status: 'pending' } },
+    );
+
+    // Snapshot the buyer's saved shipping address at offer time
+    const buyerProfile = await UserProfile.findOne({ where: { userId: req.user.sub } });
+    const buyerAddressJson = buyerProfile?.address1 ? {
+      line1:    buyerProfile.address1,
+      line2:    buyerProfile.address2 || undefined,
+      city:     buyerProfile.city,
+      postcode: buyerProfile.postcode,
+      state:    buyerProfile.state || undefined,
+      country:  buyerProfile.country || 'GB',
+    } : null;
+
+    const offer = await Offer.create({
+      listingId: listing.id,
+      buyerId:   req.user.sub,
+      amount,
+      message:   message || null,
+      status:    'pending',
+      expiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000),
+      buyerAddressJson,
+    });
+    await notifyUser({
+      userId: listing.sellerId,
+      type:   NotificationType.INFO,
+      title:  'New offer on your listing',
+      body:   `Someone offered £${Number(amount).toFixed(2)} on "${listing.title}"`,
+      linkUrl: `/marketplace/${listing.id}/offers`,
+      meta:   { offerId: offer.id, listingId: listing.id },
+    }).catch(() => {});
+    res.status(201).json(offer);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── Proof image (public, approved listings only) ─────────────────────────────
+
+router.get('/:id/proof-image', async (req, res) => {
+  try {
+    const listing = await CardListing.findByPk(req.params.id, {
+      attributes: ['id', 'status', 'moderationResult', 'proofImagePath'],
+    });
+    if (!listing || listing.status !== 'ACTIVE' || listing.moderationResult !== 'approved' || !listing.proofImagePath) {
+      return res.status(404).end();
+    }
+    const PROOF_DIR = process.env.PROOF_DIR || '/var/uploads/marketplace_proofs';
+    const diskPath = join(PROOF_DIR, basename(listing.proofImagePath));
+    try {
+      const buf = await readFile(diskPath);
+      const ext = basename(diskPath).split('.').pop()?.toLowerCase() ?? 'jpg';
+      const mime = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+      res.setHeader('content-type', mime);
+      res.setHeader('cache-control', 'public, max-age=3600');
+      return res.send(buf);
+    } catch {
+      return res.status(404).end();
+    }
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -352,50 +462,64 @@ router.post('/:id/proof', requireAuth, async (req, res) => {
     }
 
     const imagePath = await saveProofImage(listing.id, req.user.sub, image);
-    const result    = await moderateProof(imagePath, listing.proofCode, expectedCardName, expectedSetName);
 
-    const updates = {
-      proofImagePath:   imagePath,
-      proofUploadedAt:  new Date(),
-      moderationResult: result,
-      moderatedAt:      result !== 'pending_admin' ? new Date() : null,
-    };
+    // Record upload immediately and respond — OCR runs in background
+    await listing.update({
+      proofImagePath:  imagePath,
+      proofUploadedAt: new Date(),
+      moderationResult: 'pending',
+    });
 
-    if (result === 'approved') {
-      updates.status = 'ACTIVE';
+    res.json({ ok: true, result: 'processing' });
 
-      // Write LISTING_VERIFIED ownership record
-      await OwnershipRecord.create({
-        cardId:     listing.cardId,
-        ownerId:    listing.sellerId,
-        eventType:  'LISTING_VERIFIED',
-        sourceType: 'LISTING',
-        sourceId:   listing.id,
-        proofCode:  listing.proofCode,
-      });
+    // ── Background OCR ────────────────────────────────────────────────────────
+    setImmediate(async () => {
+      try {
+        const result = await moderateProof(imagePath, listing.proofCode, expectedCardName, expectedSetName);
 
-      await notifyUser({
-        userId: req.user.sub,
-        type:   NotificationType.INFO,
-        title:  'Listing verified and live',
-        body:   `Your listing "${listing.title}" has been verified and is now live.`,
-        linkUrl: `/marketplace/${listing.id}`,
-      }).catch(() => {});
+        const updates = {
+          moderationResult: result,
+          moderatedAt:      new Date(),
+        };
 
-      triggerWishlistMatch(listing).catch(() => {});
-    }
-    if (result === 'pending_admin') {
-      await notifyUser({
-        userId:  req.user.sub,
-        type:    NotificationType.INFO,
-        title:   'Proof submitted — under review',
-        body:    `Your proof photo for "${listing.title}" is being reviewed by a moderator. We'll let you know once it's approved.`,
-        linkUrl: `/marketplace/${listing.id}`,
-      }).catch(() => {});
-    }
+        if (result === 'approved') {
+          updates.status = 'ACTIVE';
 
-    await listing.update(updates);
-    res.json({ ok: true, result });
+          await OwnershipRecord.create({
+            cardId:     listing.cardId,
+            ownerId:    listing.sellerId,
+            eventType:  'LISTING_VERIFIED',
+            sourceType: 'LISTING',
+            sourceId:   listing.id,
+            proofCode:  listing.proofCode,
+          });
+
+          await notifyUser({
+            userId: listing.sellerId,
+            type:   NotificationType.INFO,
+            title:  'Listing verified and live',
+            body:   `Your listing "${listing.title}" has been verified and is now live.`,
+            linkUrl: `/marketplace?listing=${listing.id}`,
+          }).catch(() => {});
+
+          triggerWishlistMatch(listing).catch(() => {});
+        }
+
+        if (result === 'pending_admin') {
+          await notifyUser({
+            userId:  listing.sellerId,
+            type:    NotificationType.INFO,
+            title:   'Proof submitted — under review',
+            body:    `Your proof photo for "${listing.title}" is being reviewed by a moderator. We'll let you know once it's approved.`,
+            linkUrl: `/marketplace`,
+          }).catch(() => {});
+        }
+
+        await listing.update(updates);
+      } catch (err) {
+        logger.error({ msg: 'proof_ocr_background_error', listingId: listing.id, error: err.message });
+      }
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

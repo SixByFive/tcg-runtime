@@ -9,6 +9,14 @@ const router = Router();
 
 // ─── Public ───────────────────────────────────────────────────────────────────
 
+const normalisePlan = (p) => {
+  const obj = p.toJSON ? p.toJSON() : { ...p };
+  if (typeof obj.featuresJson === 'string') {
+    try { obj.featuresJson = JSON.parse(obj.featuresJson); } catch { obj.featuresJson = []; }
+  }
+  return obj;
+};
+
 /** GET /payments/plans — list all active plans, ordered for display */
 router.get('/', async (_req, res) => {
   try {
@@ -17,7 +25,7 @@ router.get('/', async (_req, res) => {
       attributes: { exclude: ['stripeProductId', 'stripePriceId'] },
       order: [['sortOrder', 'ASC']],
     });
-    res.json(plans);
+    res.json(plans.map(normalisePlan));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -29,7 +37,7 @@ router.get('/', async (_req, res) => {
 router.get('/admin', requireAdmin, async (_req, res) => {
   try {
     const plans = await SubscriptionPlan.findAll({ order: [['sortOrder', 'ASC']] });
-    res.json(plans);
+    res.json(plans.map(normalisePlan));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

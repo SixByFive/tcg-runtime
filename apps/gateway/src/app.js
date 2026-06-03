@@ -271,6 +271,25 @@ export async function createApp({ logger }) {
     }
   });
 
+  // ── Marketplace proof-image proxy ────────────────────────────────────────
+  // Serves approved proof images from marketplace-service to the browser.
+  // Path kept generic so we don't leak internal file paths.
+  const MARKETPLACE_URL = process.env.MARKETPLACE_SERVICE_URL || 'http://localhost:4014';
+  app.get('/marketplace-proof/:listingId', async (req, res) => {
+    const target = `${MARKETPLACE_URL}/marketplace/listings/${encodeURIComponent(req.params.listingId)}/proof-image`;
+    try {
+      const upstream = await fetch(target);
+      if (!upstream.ok) return res.status(upstream.status).end();
+      const contentType = upstream.headers.get('content-type') || 'image/jpeg';
+      res.setHeader('content-type', contentType);
+      res.setHeader('cache-control', 'public, max-age=3600');
+      res.send(Buffer.from(await upstream.arrayBuffer()));
+    } catch (err) {
+      logger.warn(`marketplace-proof proxy error: ${err.message}`);
+      res.status(502).end();
+    }
+  });
+
   // ── Catalog admin proxy ───────────────────────────────────────────────────
   // Forwards /catalog-admin/* → catalog-service /admin/* so the admin UI is
   // reachable from the host via the gateway's published port.

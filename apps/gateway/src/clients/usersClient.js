@@ -84,7 +84,8 @@ export async function getProfileById(userId) {
  */
 export async function updateProfile(token, updates) {
   const ALLOWED = ['bio', 'favouritePokemon', 'avatar', 'country', 'status',
-                   'publicProfile', 'wantsTrade', 'wantsMarketplace'];
+                   'publicProfile', 'wantsTrade', 'wantsMarketplace',
+                   'address1', 'address2', 'city', 'postcode', 'state', 'phone'];
   const body = Object.fromEntries(
     Object.entries(updates).filter(([k]) => ALLOWED.includes(k)),
   );
@@ -103,7 +104,34 @@ export async function updateProfile(token, updates) {
     bio:              profile.bio              ?? null,
     favouritePokemon: profile.favouritePokemon ?? null,
     avatar:           profile.avatar           ?? null,
-    user: null, // caller can re-fetch if needed; avoids an extra round-trip
+    address1:         profile.address1         ?? null,
+    address2:         profile.address2         ?? null,
+    city:             profile.city             ?? null,
+    postcode:         profile.postcode         ?? null,
+    state:            profile.state            ?? null,
+    country:          profile.country          ?? null,
+    user: null,
+  };
+}
+
+/**
+ * GET /users/me — return the authenticated user's own profile including address.
+ */
+export async function getMyProfile(token) {
+  const data = await request('/users/me', {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!data) return null;
+  const profile = data.profile || {};
+  return {
+    id:       profile.id       ?? null,
+    userId:   data.id          ?? null,
+    address1: profile.address1 ?? null,
+    address2: profile.address2 ?? null,
+    city:     profile.city     ?? null,
+    postcode: profile.postcode ?? null,
+    state:    profile.state    ?? null,
+    country:  profile.country  ?? null,
   };
 }
 

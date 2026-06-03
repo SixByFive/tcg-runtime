@@ -10,6 +10,7 @@ export const typeDefs = gql`
     # ── User / Profile ──────────────────────────────────────────────────────────
     userProfile(username: String!): UserProfile
     userById(id: ID!): UserProfile
+    myDeliveryAddress: UserProfile
     searchUsers(q: String!, limit: Int): [PublicUser!]!
     userAchievements(userId: ID!): [UserAchievement!]!
     achievements: [Achievement!]!
@@ -449,6 +450,11 @@ export const typeDefs = gql`
     publicProfile: Boolean
     wantsTrade: Boolean
     wantsMarketplace: Boolean
+    address1: String
+    address2: String
+    city: String
+    postcode: String
+    state: String
     user: User
     planName: String
   }
@@ -759,6 +765,7 @@ export const typeDefs = gql`
     offerMinPrice: Float
     willTrade: Boolean
     proofCode: String
+    proofImageUrl: String
     moderationResult: String
     proofImagePath: String
     rating: Int

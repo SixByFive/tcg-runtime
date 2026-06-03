@@ -9,28 +9,68 @@ import { createWorker } from 'tesseract.js';
 
 /**
  * Normalise a string for fuzzy comparison: lowercase, strip punctuation/symbols,
- * collapse whitespace. Works well for both OCR output and catalog card/set names.
+ * collapse whitespace.
  */
 function normaliseText(str) {
   return (str || '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
 /**
+ * Apply common OCR digit↔letter substitutions so that e.g. "P0LIWAG" matches
+ * "POLIWAG". Applied to both haystack and needle before comparison.
+ */
+function ocrNormalise(str) {
+  return normaliseText(str)
+    .replace(/0/g, 'o')
+    .replace(/1/g, 'i')
+    .replace(/3/g, 'e')
+    .replace(/5/g, 's')
+    .replace(/8/g, 'b');
+}
+
+/**
  * Check whether `haystack` (OCR blob) contains `needle` (card name / set name).
- * Exact substring match first; falls back to word-overlap requiring ≥80% of
- * significant words (length > 2) to appear somewhere in the haystack.
+ * Uses OCR-aware normalisation to handle digit/letter confusions, then tries
+ * exact substring → word-overlap (≥80% of significant words).
  */
 function ocrContains(haystack, needle) {
   if (!needle) return true; // unknown — skip this check
-  const h = normaliseText(haystack);
-  const n = normaliseText(needle);
+  const h = ocrNormalise(haystack);
+  const n = ocrNormalise(needle);
   if (!n) return true;
   if (h.includes(n)) return true;
+  // Tesseract (PSM 11) sometimes splits a word across OCR regions, inserting a
+  // space or newline mid-word. Strip all spaces from both sides and retry.
+  const hCompact = h.replace(/ /g, '');
+  const nCompact = n.replace(/ /g, '');
+  if (hCompact.includes(nCompact)) return true;
   // Word-overlap fallback
   const words = n.split(' ').filter((w) => w.length > 2);
-  if (!words.length) return h.includes(n);
-  const matched = words.filter((w) => h.includes(w));
+  if (!words.length) return hCompact.includes(nCompact);
+  const matched = words.filter((w) => h.includes(w) || hCompact.includes(w));
   return matched.length / words.length >= 0.8;
+}
+
+/**
+ * Fuzzy proof-code match — allows up to 1 character mismatch per 8-char window.
+ * Handles common OCR misreads of handwritten characters (Z→2, G→6, etc.)
+ * without being so loose that wrong codes pass.
+ */
+function fuzzyCodeMatch(haystack, code) {
+  if (!code || !haystack) return false;
+  const len = code.length;
+  if (haystack.length < len) return false;
+  for (let i = 0; i <= haystack.length - len; i++) {
+    let mismatches = 0;
+    for (let j = 0; j < len; j++) {
+      if (haystack[i + j] !== code[j]) {
+        mismatches++;
+        if (mismatches > 1) break;
+      }
+    }
+    if (mismatches <= 1) return true;
+  }
+  return false;
 }
 
 /**
@@ -95,12 +135,14 @@ export async function ensureProofDir() {
 
 export async function saveProofImage(listingId, sellerId, base64Data) {
   await ensureProofDir();
+  // Detect format from data URL header; default to jpeg
+  const mimeMatch = base64Data.match(/^data:image\/(\w+);base64,/);
+  const ext = mimeMatch ? mimeMatch[1].replace('jpeg', 'jpg') : 'jpg';
   const raw = base64Data.replace(/^data:image\/\w+;base64,/, '');
   const buf = Buffer.from(raw, 'base64');
-  const filename = `mp_${listingId}_${sellerId}_${Date.now()}.jpg`;
+  const filename = `mp_${listingId}_${sellerId}_${Date.now()}.${ext}`;
   const filePath = join(PROOF_DIR, filename);
   await writeFile(filePath, buf);
-  // Return relative path so it can be served via /uploads/marketplace_proofs/<filename>
   return `marketplace_proofs/${filename}`;
 }
 
@@ -141,7 +183,22 @@ export async function moderateProof(imagePath, expectedCode, expectedCardName, e
 
   const diskPath = join(PROOF_DIR, basename(imagePath));
 
+  // Reject formats Leptonica cannot read before spawning a worker
+  const supportedExts = new Set(['jpg', 'jpeg', 'png', 'webp', 'tiff', 'tif', 'bmp', 'gif']);
+  const fileExt = basename(imagePath).split('.').pop()?.toLowerCase() ?? '';
+  if (!supportedExts.has(fileExt)) {
+    logger.warn({ msg: 'proof_ocr_unsupported_format', imagePath, ext: fileExt });
+    alertDiscordOcrFailed({ imagePath, reason: `Unsupported image format: .${fileExt} — manual review required`, cardName: expectedCardName, setName: expectedSetName }).catch(() => {});
+    return 'pending_admin';
+  }
+
   let worker;
+  // Guard against Tesseract worker errors crashing the process
+  const uncaughtHandler = (err) => {
+    logger.error({ msg: 'tesseract_uncaught', error: err?.message ?? String(err) });
+  };
+  process.once('uncaughtException', uncaughtHandler);
+
   try {
     worker = await createWorker('eng', 1, { logger: () => {} });
 
@@ -152,17 +209,21 @@ export async function moderateProof(imagePath, expectedCode, expectedCardName, e
     const rawText    = data.text || '';
     const confidence = Math.round(data.confidence);
 
-    // ── 1. Proof code check ────────────────────────────────────────────────────
+    // ── 1. Proof code check (fuzzy — allows 1 char mismatch for handwriting OCR) ─
     const CODE_ALPHA  = /[^A-Z0-9]/g;
     const extractedCode = rawText.toUpperCase().replace(CODE_ALPHA, '');
     const normalCode    = expectedCode.toUpperCase().replace(CODE_ALPHA, '');
-    const codeFound     = Boolean(normalCode && extractedCode.includes(normalCode));
+    const codeFound     = Boolean(normalCode && (
+      extractedCode.includes(normalCode) || fuzzyCodeMatch(extractedCode, normalCode)
+    ));
 
     // ── 2. Card name check ─────────────────────────────────────────────────────
     const cardNameFound = ocrContains(rawText, expectedCardName);
 
-    // ── 3. Set name check ──────────────────────────────────────────────────────
-    const setNameFound  = ocrContains(rawText, expectedSetName);
+    // ── 3. Set name check (informational only — not a blocking condition) ─────────
+    // Modern cards print abbreviations (e.g. "OBF") not full set names,
+    // so this check is unreliable across eras and excluded from auto-approval.
+    const setNameFound = ocrContains(rawText, expectedSetName);
 
     logger.info({
       msg:           'proof_ocr_result',
@@ -177,17 +238,17 @@ export async function moderateProof(imagePath, expectedCode, expectedCardName, e
       extractedCode,
     });
 
-    // All checks pass + reasonable Tesseract confidence → auto-approve
-    if (codeFound && cardNameFound && setNameFound && confidence >= 50) {
+    // Card name + confidence → auto-approve.
+    // Proof code is shown publicly on the listing so buyers can self-verify
+    // against the proof photo; OCR no longer gates on it.
+    if (cardNameFound && confidence >= 50) {
       return 'approved';
     }
 
     // Build a human-readable reason for the Discord alert
     const failures = [];
-    if (!codeFound)     failures.push(`code mismatch (expected \`${normalCode}\`, OCR read \`${extractedCode || '(nothing)'}\`)`);
     if (!cardNameFound) failures.push(`card name not found (expected \`${expectedCardName || '(unknown)'}\`)`);
-    if (!setNameFound)  failures.push(`set name not found (expected \`${expectedSetName || '(unknown)'}\`)`);
-    if (confidence < 50 && codeFound && cardNameFound && setNameFound) {
+    if (confidence < 50) {
       failures.push(`low OCR confidence (${confidence}% < 50%)`);
     }
 
@@ -207,6 +268,7 @@ export async function moderateProof(imagePath, expectedCode, expectedCardName, e
     alertDiscordOcrFailed({ imagePath, reason: `OCR error: ${err.message}`, cardName: expectedCardName, setName: expectedSetName }).catch(() => {});
     return 'pending_admin';
   } finally {
+    process.removeListener('uncaughtException', uncaughtHandler);
     if (worker) await worker.terminate().catch(() => {});
   }
 }

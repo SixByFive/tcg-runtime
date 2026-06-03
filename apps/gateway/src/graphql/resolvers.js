@@ -123,6 +123,16 @@ export const resolvers = {
 
     // ── User / Profile ──────────────────────────────────────────────────────────
 
+    myDeliveryAddress: async (_, __, { token, clients, logger }) => {
+      if (!token) return null;
+      try {
+        return await clients.users.getMyProfile(token);
+      } catch (error) {
+        logger.warn(`myDeliveryAddress failed: ${error.message}`);
+        return null;
+      }
+    },
+
     userProfile: async (_, { username }, { clients, logger }) => {
       try {
         return await clients.users?.getProfile(username) ?? null;
@@ -2158,6 +2168,8 @@ export const resolvers = {
         return null;
       }
     },
+    proofImageUrl: (obj) =>
+      obj.moderationResult === 'approved' ? `/marketplace-proof/${obj.id}` : null,
   },
 
   ProductListing: {
@@ -2277,4 +2289,5 @@ export const resolvers = {
       }
     },
   },
+
 };

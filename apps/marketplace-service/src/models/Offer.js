@@ -13,8 +13,9 @@ export default function defineOffer(sequelize) {
     message:        { type: DataTypes.TEXT, allowNull: true },
     counterAmount:  { type: DataTypes.DECIMAL(10, 4), allowNull: true },
     counterMessage: { type: DataTypes.TEXT, allowNull: true },
-    expiresAt:      { type: DataTypes.DATE, allowNull: true },
-    respondedAt:    { type: DataTypes.DATE, allowNull: true },
+    expiresAt:         { type: DataTypes.DATE, allowNull: true },
+    respondedAt:       { type: DataTypes.DATE, allowNull: true },
+    buyerAddressJson:  { type: DataTypes.JSON, allowNull: true },
   }, {
     tableName: 'offers',
     indexes: [
