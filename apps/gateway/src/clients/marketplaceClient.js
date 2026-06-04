@@ -96,14 +96,6 @@ export async function createListing(token, input) {
   });
 }
 
-export async function submitListingProof(token, id, image) {
-  return request(`/marketplace/listings/${encodeURIComponent(id)}/proof`, {
-    method: 'POST',
-    headers: authHeaders(token),
-    body: JSON.stringify({ image }),
-  });
-}
-
 export async function updateListing(token, id, input) {
   return request(`/marketplace/listings/${encodeURIComponent(id)}`, {
     method: 'PATCH',
