@@ -82,6 +82,7 @@ export const typeDefs = gql`
     browseTrades(page: Int, pageSize: Int): [Trade!]!
     myTrades(page: Int, pageSize: Int, status: TradeStatus): [Trade!]!
     trade(id: ID!): Trade
+    quoteTradeShipping(id: ID!): TradeShippingQuote!
 
     # ── Subscriptions / Payments ─────────────────────────────────────────────────
     subscriptionPlans: [SubscriptionPlan!]!
@@ -256,6 +257,8 @@ export const typeDefs = gql`
     respondToTrade(id: ID!, accept: Boolean!, counterCards: [TradeCardInput!], reason: String): Trade!
     cancelTrade(id: ID!, reason: String): Trade!
     uploadTradeProof(id: ID!, proofImage: String!, proofCode: String): TradeProofResult!
+    setTradeShippingAddress(id: ID!, address: JSON!): Boolean!
+    shipTrade(id: ID!, parcelSize: String): ShipTradeResult!
     submitTradeTracking(id: ID!, trackingNumber: String!): Trade!
     confirmTradeReceived(id: ID!): Trade!
     raiseTradeDispute(id: ID!, reason: String!): TradeDisputeResult!
@@ -1468,6 +1471,26 @@ export const typeDefs = gql`
     createdAt: String
   }
 
+  type TradeShippingQuote {
+    amountPence: Int!
+    amount: Float!
+    currency: String!
+    carrier: String
+    service: String
+  }
+
+  type ShipTradeResult {
+    ok: Boolean!
+    trackingNumber: String
+    trackingUrl: String
+    labelUrl: String
+    labelBase64: String
+    carrier: String
+    service: String
+    labelCost: Float
+    labelCostPence: Int
+  }
+
   type Trade {
     id: ID!
     partyAId: ID
@@ -1490,6 +1513,8 @@ export const typeDefs = gql`
     proofBVerified: Boolean
     trackingNumberA: String
     trackingNumberB: String
+    addressASet: Boolean
+    addressBSet: Boolean
     createdAt: String
     updatedAt: String
     cards: [TradeCard!]

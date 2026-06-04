@@ -213,6 +213,80 @@ router.post('/book-for-order', async (req, res) => {
   }
 });
 
+// ─── POST /internal/shipping/book-for-trade ───────────────────────────────────
+//
+// Books a tracked P2G label for one leg of a trade (each party ships their own cards).
+//
+// Body: {
+//   tradeId, userId,
+//   from: { name, line1, line2, city, postcode, country, phone, email },
+//   to:   { name, line1, line2, city, postcode, country, phone, email },
+//   parcelSize,    // 'LARGE_LETTER' | 'SMALL_PARCEL' | 'MEDIUM_PARCEL'
+//   declaredValue, // GBP float
+// }
+//
+// Returns: { labelId, trackingNumber, trackingUrl, carrier, service, labelUrl, labelBase64, amount }
+
+router.post('/book-for-trade', async (req, res) => {
+  const { tradeId, userId, from, to, parcelSize, declaredValue } = req.body;
+
+  if (!tradeId || !userId || !from || !to || !parcelSize) {
+    return res.status(400).json({ error: 'tradeId, userId, from, to, parcelSize are required' });
+  }
+  if (!from.postcode || !to.postcode) {
+    return res.status(400).json({ error: 'from.postcode and to.postcode are required' });
+  }
+
+  const dims   = parcelSizeToDimensions(parcelSize);
+  const parcel = { ...dims, value: declaredValue ?? 10 };
+
+  try {
+    const quotes = await getQuotes(to, from, parcel);
+    if (!quotes.length) {
+      return res.status(422).json({ error: 'No shipping services available for this route' });
+    }
+
+    const cheapest = quotes.reduce((best, q) => (q.amount < best.amount ? q : best), quotes[0]);
+
+    logger.info(`book-for-trade: trade=${tradeId} service=${cheapest.id} amount=${cheapest.amount}`);
+
+    const result = await bookLabel({ serviceSlug: cheapest.id, to, from, parcel });
+
+    const label = await ShippingLabel.create({
+      userId,
+      externalLabelId: result.orderId,
+      trackingNumber:  result.trackingNumber,
+      carrier:         result.carrier ?? cheapest.carrier,
+      service:         cheapest.service ?? result.service,
+      labelUrl:        result.trackingUrl,
+      qrCodeUrl:       result.trackingUrl,
+      relatedType:     'Trade',
+      relatedId:       tradeId,
+      trackingStatus:  'booked',
+      meta: {
+        orderLineId: result.orderLineId,
+        p2gOrderId:  result.orderId,
+        p2gHash:     result.hash,
+        amount:      result.amount,
+      },
+    });
+
+    res.json({
+      labelId:        label.id,
+      trackingNumber: result.trackingNumber,
+      trackingUrl:    result.trackingUrl,
+      carrier:        result.carrier ?? cheapest.carrier,
+      service:        cheapest.service,
+      labelUrl:       result.trackingUrl,
+      labelBase64:    result.labelBase64,
+      amount:         result.amount,
+    });
+  } catch (err) {
+    logger.error(`book-for-trade failed for trade=${tradeId}: ${err.message}`);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ─── GET /internal/shipping/order/:orderId/tracking ──────────────────────────
 // Returns tracking for the shipping label linked to a marketplace order.
 // Called by the gateway after it has already verified the requesting user

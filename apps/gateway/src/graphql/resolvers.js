@@ -1697,6 +1697,34 @@ export const resolvers = {
       }
     },
 
+    quoteTradeShipping: async (_, { id }, { token, clients, logger }) => {
+      try {
+        return await clients.trading.quoteTradeShipping(token, id);
+      } catch (error) {
+        logger.warn(`quoteTradeShipping failed: ${error.message}`);
+        throw error;
+      }
+    },
+
+    setTradeShippingAddress: async (_, { id, address }, { token, clients, logger }) => {
+      try {
+        await clients.trading.setTradeShippingAddress(token, id, address);
+        return true;
+      } catch (error) {
+        logger.warn(`setTradeShippingAddress failed: ${error.message}`);
+        throw error;
+      }
+    },
+
+    shipTrade: async (_, { id, parcelSize }, { token, clients, logger }) => {
+      try {
+        return await clients.trading.shipTrade(token, id, parcelSize);
+      } catch (error) {
+        logger.warn(`shipTrade failed: ${error.message}`);
+        throw error;
+      }
+    },
+
     submitTradeTracking: async (_, { id, trackingNumber }, { token, clients, logger }) => {
       try {
         return await clients.trading.submitTradeTracking(token, id, trackingNumber);
@@ -2266,6 +2294,11 @@ export const resolvers = {
         return null;
       }
     },
+  },
+
+  Trade: {
+    addressASet: (obj) => obj.addressA != null && obj.addressA !== '',
+    addressBSet: (obj) => obj.addressB != null && obj.addressB !== '',
   },
 
   SubscriptionPlan: {

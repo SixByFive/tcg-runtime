@@ -404,6 +404,203 @@ router.post('/:id/proof', async (req, res) => {
   }
 });
 
+// ── GET /trades/:id/quote-shipping — get P2G quote for this trade leg ────────
+
+const PAYMENTS_SERVICE_URL = process.env.PAYMENTS_SERVICE_URL || 'http://localhost:4016';
+
+router.get('/:id/quote-shipping', async (req, res) => {
+  try {
+    const trade = await Trade.findByPk(req.params.id);
+    if (!trade) return res.status(404).json({ error: 'Trade not found' });
+    if (!isParty(trade, req.user.sub)) return res.status(403).json({ error: 'Forbidden' });
+
+    const isPartyA  = trade.partyAId === req.user.sub;
+    const myAddrRaw = isPartyA ? trade.addressA : trade.addressB;
+    const toAddrRaw = isPartyA ? trade.addressB : trade.addressA;
+
+    if (!myAddrRaw || !toAddrRaw) {
+      return res.status(422).json({ error: 'Both parties must share their address before a quote can be generated' });
+    }
+
+    const from = JSON.parse(myAddrRaw);
+    const to   = JSON.parse(toAddrRaw);
+
+    const quoteRes = await fetch(`${SHIPPING_SERVICE_URL}/internal/shipping/quote`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'x-internal-key': INTERNAL_API_KEY },
+      body:    JSON.stringify({ from, to, parcelSize: 'LARGE_LETTER', declaredValue: 10 }),
+    });
+    if (!quoteRes.ok) {
+      const err = await quoteRes.json().catch(() => ({}));
+      return res.status(quoteRes.status).json({ error: err.error || 'Quote failed' });
+    }
+
+    const quote = await quoteRes.json();
+    res.json({
+      amountPence: Math.round(quote.amount * 100),
+      amount:      quote.amount,
+      currency:    'GBP',
+      carrier:     quote.carrier,
+      service:     quote.service,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POST /trades/:id/address — store caller's shipping address ────────────────
+// Called when a party wants to share their address before shipping.
+// Stores in addressA or addressB depending on which party is calling.
+
+router.post('/:id/address', async (req, res) => {
+  const { address } = req.body;
+  if (!address?.postcode) return res.status(400).json({ error: 'address with postcode is required' });
+
+  try {
+    const trade = await Trade.findByPk(req.params.id);
+    if (!trade) return res.status(404).json({ error: 'Trade not found' });
+    if (!isParty(trade, req.user.sub)) return res.status(403).json({ error: 'Forbidden' });
+    if (!['LOCKED', 'IN_TRANSIT'].includes(trade.status)) {
+      return res.status(409).json({ error: 'Trade must be LOCKED or IN_TRANSIT to set shipping address' });
+    }
+
+    const isPartyA = trade.partyAId === req.user.sub;
+    await trade.update({ [isPartyA ? 'addressA' : 'addressB']: JSON.stringify(address) });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POST /trades/:id/ship — auto-book Parcel2Go label ────────────────────────
+// Requires both parties to have set their addresses via /address first.
+// Books a P2G label for the caller's leg of the trade.
+
+const SHIPPING_SERVICE_URL = process.env.SHIPPING_SERVICE_URL || 'http://localhost:4023';
+const INTERNAL_API_KEY     = process.env.INTERNAL_API_KEY || '';
+
+router.post('/:id/ship', async (req, res) => {
+  const { parcelSize = 'LARGE_LETTER' } = req.body;
+  const t = await sequelize.transaction();
+  try {
+    const trade = await Trade.findByPk(req.params.id, { transaction: t, lock: t.LOCK.UPDATE });
+    if (!trade) { await t.rollback(); return res.status(404).json({ error: 'Trade not found' }); }
+    if (!isParty(trade, req.user.sub)) { await t.rollback(); return res.status(403).json({ error: 'Forbidden' }); }
+    if (!['LOCKED', 'IN_TRANSIT'].includes(trade.status)) {
+      await t.rollback();
+      return res.status(409).json({ error: 'Trade must be LOCKED or IN_TRANSIT to ship' });
+    }
+
+    const isPartyA  = trade.partyAId === req.user.sub;
+    const myAddrRaw = isPartyA ? trade.addressA : trade.addressB;
+    const toAddrRaw = isPartyA ? trade.addressB : trade.addressA;
+
+    if (!myAddrRaw) { await t.rollback(); return res.status(422).json({ error: 'Set your shipping address first' }); }
+    if (!toAddrRaw) { await t.rollback(); return res.status(422).json({ error: 'Waiting for the other party to share their address' }); }
+
+    const from = JSON.parse(myAddrRaw);
+    const to   = JSON.parse(toAddrRaw);
+
+    // Quote the label cost first
+    const quoteRes = await fetch(`${SHIPPING_SERVICE_URL}/internal/shipping/quote`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'x-internal-key': INTERNAL_API_KEY },
+      body:    JSON.stringify({ from, to, parcelSize, declaredValue: 10 }),
+    });
+    if (!quoteRes.ok) {
+      const qErr = await quoteRes.json().catch(() => ({}));
+      await t.rollback();
+      return res.status(422).json({ error: qErr.error || 'Could not get shipping quote' });
+    }
+    const quote       = await quoteRes.json();
+    const amountPence = Math.round(quote.amount * 100);
+
+    // Charge the user's wallet for the label cost
+    const chargeRes = await fetch(`${PAYMENTS_SERVICE_URL}/internal/wallet/spend`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'x-internal-key': INTERNAL_API_KEY },
+      body:    JSON.stringify({
+        userId:      req.user.sub,
+        amountPence,
+        description: `Shipping label for trade ${trade.id}`,
+      }),
+    });
+    if (!chargeRes.ok) {
+      const chargeErr = await chargeRes.json().catch(() => ({}));
+      await t.rollback();
+      return res.status(chargeRes.status).json({
+        error:            chargeErr.error || 'Wallet charge failed',
+        amountPence,
+        insufficientFunds: chargeRes.status === 402,
+      });
+    }
+
+    // Book label via shipping-service
+    const shipRes = await fetch(`${SHIPPING_SERVICE_URL}/internal/shipping/book-for-trade`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'x-internal-key': INTERNAL_API_KEY },
+      body:    JSON.stringify({ tradeId: trade.id, userId: req.user.sub, from, to, parcelSize, declaredValue: 10 }),
+    });
+    if (!shipRes.ok) {
+      // Booking failed — refund the wallet charge
+      await fetch(`${PAYMENTS_SERVICE_URL}/internal/wallet/refund-purchase`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', 'x-internal-key': INTERNAL_API_KEY },
+        body:    JSON.stringify({ userId: req.user.sub, amountPence, description: `Refund: shipping label failed for trade ${trade.id}` }),
+      }).catch(() => {});
+      const err = await shipRes.json().catch(() => ({}));
+      await t.rollback();
+      return res.status(shipRes.status).json({ error: err.error || 'Shipping booking failed' });
+    }
+    const label = await shipRes.json();
+
+    // Store tracking + label in metaJson and update status
+    const meta    = trade.metaJson || {};
+    const key     = isPartyA ? 'A' : 'B';
+    const updates = {
+      [`trackingNumber${key}`]: label.trackingNumber,
+      metaJson: {
+        ...meta,
+        [`label${key}`]: {
+          trackingNumber: label.trackingNumber,
+          trackingUrl:    label.trackingUrl,
+          labelUrl:       label.labelUrl,
+          carrier:        label.carrier,
+          service:        label.service,
+        },
+      },
+    };
+    // First party to ship advances to IN_TRANSIT
+    if (trade.status === 'LOCKED') updates.status = 'IN_TRANSIT';
+
+    await trade.update(updates, { transaction: t });
+    await t.commit();
+
+    const other = otherParty(trade, req.user.sub);
+    await notify(other, NotificationType.INFO,
+      'Cards are on their way',
+      `Your trade partner has shipped their cards. Tracking: ${label.trackingNumber}`,
+      `/trades/${trade.id}`,
+      { tradeId: trade.id, trackingNumber: label.trackingNumber },
+    );
+
+    res.json({
+      ok:             true,
+      trackingNumber: label.trackingNumber,
+      trackingUrl:    label.trackingUrl,
+      labelUrl:       label.labelUrl,
+      labelBase64:    label.labelBase64,
+      carrier:        label.carrier,
+      service:        label.service,
+      labelCost:      quote.amount,
+      labelCostPence: amountPence,
+    });
+  } catch (err) {
+    if (!t.finished) await t.rollback().catch(() => {});
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── POST /trades/:id/tracking — submit tracking number ───────────────────────
 
 router.post('/:id/tracking', async (req, res) => {

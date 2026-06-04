@@ -127,6 +127,29 @@ export async function uploadTradeProof(token, id, { proofImage, proofCode }) {
   });
 }
 
+export async function quoteTradeShipping(token, id) {
+  return request(`/trades/${encodeURIComponent(id)}/quote-shipping`, {
+    method: 'GET',
+    headers: authHeaders(token),
+  });
+}
+
+export async function setTradeShippingAddress(token, id, address) {
+  return request(`/trades/${encodeURIComponent(id)}/address`, {
+    method: 'POST',
+    headers: authHeaders(token),
+    body: JSON.stringify({ address }),
+  });
+}
+
+export async function shipTrade(token, id, parcelSize) {
+  return request(`/trades/${encodeURIComponent(id)}/ship`, {
+    method: 'POST',
+    headers: authHeaders(token),
+    body: JSON.stringify({ parcelSize }),
+  });
+}
+
 export async function submitTradeTracking(token, id, trackingNumber) {
   return request(`/trades/${encodeURIComponent(id)}/tracking`, {
     method: 'POST',
