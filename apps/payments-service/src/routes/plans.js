@@ -22,7 +22,7 @@ router.get('/', async (_req, res) => {
   try {
     const plans = await SubscriptionPlan.findAll({
       where: { active: true },
-      attributes: { exclude: ['stripeProductId', 'stripePriceId'] },
+      attributes: { exclude: ['stripeProductId'] },
       order: [['sortOrder', 'ASC']],
     });
     res.json(plans.map(normalisePlan));

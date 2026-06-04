@@ -2268,6 +2268,11 @@ export const resolvers = {
     },
   },
 
+  SubscriptionPlan: {
+    stripePriceIdMonthly: (obj) => obj.interval === 'month' ? (obj.stripePriceIdMonthly ?? obj.stripePriceId ?? null) : null,
+    stripePriceIdYearly:  (obj) => obj.interval === 'year'  ? (obj.stripePriceIdYearly  ?? obj.stripePriceId ?? null) : null,
+  },
+
   ChatThread: {
     user: async (obj, _, { clients, logger }) => {
       const id = obj.userId ?? obj.user?.id ?? null;

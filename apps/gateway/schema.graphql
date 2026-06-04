@@ -5,6 +5,7 @@ type Query {
   me: User
   userProfile(username: String!): UserProfile
   userById(id: ID!): UserProfile
+  sellerReputation(userId: ID!): SellerReputation
   searchUsers(q: String!, limit: Int): [PublicUser!]!
   userAchievements(userId: ID!): [UserAchievement!]!
   achievements: [Achievement!]!
@@ -249,7 +250,18 @@ type UserProfile {
   publicProfile: Boolean
   wantsTrade: Boolean
   wantsMarketplace: Boolean
+  planName: String
   user: User
+}
+
+type SellerReputation {
+  userId: ID!
+  score: Int!
+  positive: Int!
+  negative: Int!
+  neutral: Int!
+  completedMarketplace: Int!
+  flagged: Boolean!
 }
 
 """Minimal public user shape returned by search."""
