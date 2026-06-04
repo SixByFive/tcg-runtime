@@ -110,7 +110,7 @@ type Mutation {
   upsertPriceAlert(input: UpsertPriceAlertInput!): PriceAlert!
   deletePriceAlert(id: ID!): Boolean!
   togglePriceAlert(id: ID!, active: Boolean!): Boolean!
-  createSubscription(planId: ID!, paymentMethodId: String): UserSubscription!
+  createSubscription(planId: ID!): CheckoutSession!
   cancelSubscription: Boolean!
   resumeSubscription: UserSubscription!
   initiateTrade(userId: ID!, offeredCards: [TradeCardInput!], wantedCards: [TradeCardInput!]): Trade!
@@ -799,15 +799,27 @@ type SubscriptionPlan {
   id: ID!
   name: String
   description: String
-  priceMonthly: Float
-  priceYearly: Float
+  price: Float
   currency: String
-  features: JSON
-  isActive: Boolean
-  stripePriceIdMonthly: String
-  stripePriceIdYearly: String
+  interval: String
+  stripePriceId: String
+  stripeProductId: String
+  feeDiscount: Int
+  platformFeePercent: Float
+  maxBinders: Int
+  maxCollectionCards: Int
+  maxActiveListings: Int
+  maxActiveTrades: Int
+  featuresJson: JSON
+  active: Boolean
+  sortOrder: Int
   createdAt: String
   updatedAt: String
+}
+
+type CheckoutSession {
+  url: String
+  sessionId: String
 }
 
 type UserSubscription {
