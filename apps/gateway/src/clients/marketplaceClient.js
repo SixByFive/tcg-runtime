@@ -76,6 +76,14 @@ export async function agreeToMarketplaceRules(token) {
   return data?.ok ?? false;
 }
 
+export async function submitListingProof(token, id, image) {
+  return request(`/marketplace/listings/${encodeURIComponent(id)}/proof`, {
+    method: 'POST',
+    headers: authHeaders(token),
+    body: JSON.stringify({ image }),
+  });
+}
+
 export async function getListing(id) {
   return request(`/marketplace/listings/${encodeURIComponent(id)}`);
 }

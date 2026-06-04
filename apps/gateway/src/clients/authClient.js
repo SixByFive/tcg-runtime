@@ -88,13 +88,14 @@ export async function login(input) {
   });
 
   return {
-    token: data?.accessToken ?? null,
-    user:  normaliseUser(data?.user),
+    token:        data?.accessToken  ?? null,
+    refreshToken: data?.refreshToken ?? null,
+    user:         normaliseUser(data?.user),
   };
 }
 
 /**
- * POST /auth/register → { token, user }
+ * POST /auth/register → { token, refreshToken, user }
  */
 export async function register(input) {
   const data = await request('/auth/register', {
@@ -107,8 +108,9 @@ export async function register(input) {
   });
 
   return {
-    token: data?.accessToken ?? null,
-    user:  normaliseUser(data?.user),
+    token:        data?.accessToken  ?? null,
+    refreshToken: data?.refreshToken ?? null,
+    user:         normaliseUser(data?.user),
   };
 }
 

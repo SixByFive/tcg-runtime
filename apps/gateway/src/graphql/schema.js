@@ -429,6 +429,7 @@ export const typeDefs = gql`
 
   type AuthPayload {
     token: String
+    refreshToken: String
     user: User
   }
 

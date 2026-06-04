@@ -229,6 +229,7 @@ type AuthUser {
 
 type AuthPayload {
   token: String
+  refreshToken: String
   user: User
 }
 
