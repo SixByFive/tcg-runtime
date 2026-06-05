@@ -865,6 +865,15 @@ export const resolvers = {
       }
     },
 
+    quoteTradeShipping: async (_, { id }, { token, clients, logger }) => {
+      try {
+        return await clients.trading.quoteTradeShipping(token, id);
+      } catch (error) {
+        logger.warn(`quoteTradeShipping failed: ${error.message}`);
+        throw error;
+      }
+    },
+
     adminTrades: async (_, args, { token, clients, logger }) => {
       try {
         return await clients.trading.adminGetTrades(token, args);
@@ -1693,15 +1702,6 @@ export const resolvers = {
         return await clients.trading.uploadTradeProof(token, id, { proofImage, proofCode });
       } catch (error) {
         logger.warn(`uploadTradeProof failed: ${error.message}`);
-        throw error;
-      }
-    },
-
-    quoteTradeShipping: async (_, { id }, { token, clients, logger }) => {
-      try {
-        return await clients.trading.quoteTradeShipping(token, id);
-      } catch (error) {
-        logger.warn(`quoteTradeShipping failed: ${error.message}`);
         throw error;
       }
     },
