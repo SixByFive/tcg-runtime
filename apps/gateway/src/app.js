@@ -217,6 +217,9 @@ export async function createApp({ logger }) {
       const forwardHeaders = { 'Content-Type': 'application/json' };
       if (req.headers.authorization) forwardHeaders.authorization = req.headers.authorization;
       if (req.headers.cookie) forwardHeaders.cookie = req.headers.cookie;
+      // Forward so auth-service knows whether to return tokens in body (mobile/admin)
+      // or set HttpOnly cookies (web browser). Without this, admin app never gets tokens.
+      if (req.headers['x-client-type']) forwardHeaders['x-client-type'] = req.headers['x-client-type'];
 
       const isGet = req.method === 'GET' || req.method === 'HEAD';
       const upstream = await fetch(target, {
