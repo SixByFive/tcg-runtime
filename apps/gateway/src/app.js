@@ -220,6 +220,7 @@ export async function createApp({ logger }) {
       // Forward so auth-service knows whether to return tokens in body (mobile/admin)
       // or set HttpOnly cookies (web browser). Without this, admin app never gets tokens.
       if (req.headers['x-client-type']) forwardHeaders['x-client-type'] = req.headers['x-client-type'];
+      if (req.headers['x-admin-key'])   forwardHeaders['x-admin-key']   = req.headers['x-admin-key'];
 
       const isGet = req.method === 'GET' || req.method === 'HEAD';
       const upstream = await fetch(target, {
@@ -321,6 +322,32 @@ export async function createApp({ logger }) {
     } catch (err) {
       logger.warn(`catalog-admin proxy error: ${err.message}`);
       res.status(502).json({ error: 'catalog-service unavailable' });
+    }
+  });
+
+  // ── Docker management proxy ──────────────────────────────────────────────
+  // Forwards /docker-admin/* → docker-mgmt service.
+  // The x-admin-key is forwarded so the docker-mgmt service can authenticate.
+  const DOCKER_MGMT_URL = process.env.DOCKER_MGMT_SERVICE_URL || 'http://docker-mgmt:4030';
+  app.use('/docker-admin', async (req, res) => {
+    const target = `${DOCKER_MGMT_URL}${req.url === '/' ? '' : req.url}`;
+    try {
+      const forwardHeaders = { 'Content-Type': 'application/json' };
+      if (req.headers['x-admin-key']) forwardHeaders['x-admin-key'] = req.headers['x-admin-key'];
+
+      const upstream = await fetch(target, {
+        method: req.method,
+        headers: forwardHeaders,
+        body: ['GET', 'HEAD'].includes(req.method) ? undefined : JSON.stringify(req.body),
+      });
+
+      const contentType = upstream.headers.get('content-type') || '';
+      res.status(upstream.status);
+      if (contentType) res.setHeader('content-type', contentType);
+      res.send(await upstream.text());
+    } catch (err) {
+      logger.warn(`docker-admin proxy error: ${err.message}`);
+      res.status(502).json({ error: 'docker-mgmt unavailable' });
     }
   });
 

@@ -64,6 +64,7 @@ services:
       USER_SERVICE_URL: http://user-service:4021
       MESSAGING_SERVICE_URL: http://messaging-service:4022
       SHIPPING_SERVICE_URL: http://shipping-service:4023
+      DOCKER_MGMT_SERVICE_URL: http://docker-mgmt:4030
     ports:
       - "4010:4010"
     depends_on:
@@ -451,6 +452,30 @@ services:
       timeout: 5s
       retries: 3
       start_period: 20s
+
+  docker-mgmt:
+    container_name: DockerMgmt
+    build:
+      context: ../..
+      dockerfile: apps/docker-mgmt/Dockerfile
+    restart: unless-stopped
+    environment:
+      ADMIN_API_KEY: ${ADMIN_API_KEY:-change_me_admin_key}
+      CONTAINER_NAME: DockerMgmt
+      NODE_ENV: production
+    expose:
+      - "4030"
+    volumes:
+      # Read-write access to the Docker socket — needed for start/stop/restart
+      - /var/run/docker.sock:/var/run/docker.sock
+    mem_limit: 64m
+    mem_reservation: 16m
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:4030/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
 volumes:
   redis_data:

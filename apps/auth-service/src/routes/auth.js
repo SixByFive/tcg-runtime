@@ -505,4 +505,24 @@ router.put('/email', requireAuth, async (req, res) => {
   return res.json({ message: 'Email updated — please verify your new address' });
 });
 
+// ── Admin endpoints ───────────────────────────────────────────────────────────
+
+function requireAdminKey(req, res, next) {
+  const key = process.env.ADMIN_API_KEY;
+  if (!key) return res.status(503).json({ error: 'Admin key not configured on server' });
+  if (req.headers['x-admin-key'] !== key) return res.status(401).json({ error: 'Invalid admin key' });
+  next();
+}
+
+// POST /auth/admin/clear-brute  { email }
+// Clears the login rate-limit counter for a user who has been locked out.
+router.post('/admin/clear-brute', requireAdminKey, async (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ error: 'email is required' });
+  await clearLoginBrute(email.toLowerCase().trim());
+  await clearTotpBrute(email.toLowerCase().trim()); // belt-and-braces
+  logger.info(`Admin cleared login brute-force counter for ${email}`);
+  res.json({ ok: true, email });
+});
+
 export default router;
