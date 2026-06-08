@@ -468,8 +468,8 @@ services:
     volumes:
       # Read-write access to the Docker socket — needed for start/stop/restart
       - /var/run/docker.sock:/var/run/docker.sock
-    mem_limit: 64m
-    mem_reservation: 16m
+    mem_limit: 128m
+    mem_reservation: 32m
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:4030/health"]
       interval: 30s
