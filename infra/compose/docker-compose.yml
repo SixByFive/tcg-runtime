@@ -453,6 +453,48 @@ services:
       retries: 3
       start_period: 20s
 
+  discord-bot:
+    <<: *host-gateway
+    container_name: DiscordBot
+    build:
+      context: ../..
+      dockerfile: apps/discord-bot/Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      PORT: 4001
+      DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID}
+      DISCORD_CLIENT_SECRET: ${DISCORD_CLIENT_SECRET}
+      DISCORD_PUBLIC_KEY: ${DISCORD_PUBLIC_KEY}
+      DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN}
+      DISCORD_REDIRECT_URI: ${DISCORD_REDIRECT_URI}
+      DISCORD_REQUIRED_PERMS: ${DISCORD_REQUIRED_PERMS:-}
+      DISCORD_LINK_ROLE_ID: ${DISCORD_LINK_ROLE_ID:-}
+      DB_HOST: host.docker.internal
+      DB_PORT: ${DB_PORT:-3306}
+      DB_NAME: ${DB_NAME:-sixbyfiv_tcgstand}
+      DB_USER: ${DB_USER:-}
+      DB_PASS: ${DB_PASS:-}
+      BACKEND_GRAPHQL_URL: http://gateway:4010/graphql
+      BACKEND_REST_URL: http://gateway:4010
+      WEB_APP_URL: ${WEB_APP_URL:-https://tcg.sixbyfive.com}
+      SBF_API_KEY: ${SBF_API_KEY:-}
+      BRAND_COLOR: ${BRAND_COLOR:-#4169f4}
+    expose:
+      - "4001"
+    depends_on:
+      gateway:
+        condition: service_healthy
+    mem_limit: 256m
+    mem_reservation: 128m
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:4001/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
   docker-mgmt:
     container_name: DockerMgmt
     build:
