@@ -2,7 +2,7 @@ import cron from 'node-cron';
 import { Op } from 'sequelize';
 import { createLogger } from '@sbf/logger';
 import { Notification, UserNotificationPref } from '../models/index.js';
-import { sendNotificationEmail } from '../services/email.service.js';
+import { sendNotificationEmail, sendDigestEmail } from '../services/email.service.js';
 
 const logger = createLogger('notifications-service:delivery');
 
@@ -102,37 +102,8 @@ async function sendDailyDigests() {
     const email = await getUserEmail(pref.userId);
     if (!email) continue;
 
-    // Build a summary digest email
-    const lines = notifications
-      .map(n => `<li><strong>${n.title}</strong> — ${n.body}</li>`)
-      .join('');
-
-    const html = `<!DOCTYPE html><html><body style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:16px">
-      <h2>Your SixByFive notifications (${notifications.length})</h2>
-      <ul>${lines}</ul>
-      <p><a href="${process.env.APP_URL || 'https://tcg.sixbyfive.com'}/notifications">View all</a></p>
-    </body></html>`;
-
     try {
-      const nodemailer = (await import('nodemailer')).default;
-      const transport = nodemailer.createTransport({
-        host: process.env.SMTP_HOST,
-        port: Number(process.env.SMTP_PORT || 587),
-        secure: process.env.SMTP_SECURE === 'true',
-        auth: process.env.SMTP_USER
-          ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
-          : undefined,
-      });
-
-      if (process.env.SMTP_HOST) {
-        await transport.sendMail({
-          from: process.env.EMAIL_FROM || 'noreply@sixbyfive.app',
-          to: email,
-          subject: `Your SixByFive digest (${notifications.length} notification${notifications.length === 1 ? '' : 's'})`,
-          html,
-        });
-      }
-
+      await sendDigestEmail(notifications, email);
       const now = new Date();
       await Notification.update(
         { emailSentAt: now },

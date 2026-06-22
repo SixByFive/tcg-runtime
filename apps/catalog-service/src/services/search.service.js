@@ -25,13 +25,14 @@ export function invalidateSetCache() { _setCache.clear(); }
  * @param {object} params
  * @param {string} [params.q]        - Name search (partial, case-insensitive)
  * @param {string} [params.setCode]  - Filter by set code
+ * @param {string} [params.number]   - Filter by card number (exact match)
  * @param {string} [params.rarity]   - Filter by rarity
  * @param {string} [params.supertype]
  * @param {boolean} [params.withPrices] - Include latest price snapshot
  * @param {number} [params.page]
  * @param {number} [params.pageSize]
  */
-export async function searchCards({ q, setCode, rarity, supertype, withPrices = false, page = 1, pageSize = 50 } = {}) {
+export async function searchCards({ q, setCode, number, rarity, supertype, withPrices = false, page = 1, pageSize = 50 } = {}) {
   const where = {};
 
   if (q) {
@@ -44,6 +45,9 @@ export async function searchCards({ q, setCode, rarity, supertype, withPrices = 
       attributes: ['code'],
     });
     where.set_code = resolvedSet ? resolvedSet.code : setCode;
+  }
+  if (number) {
+    where.number = number;
   }
   if (rarity) {
     where.rarity = { [Op.like]: `%${rarity}%` };

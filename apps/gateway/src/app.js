@@ -1,5 +1,7 @@
 import express from 'express';
 import cors from 'cors';
+import { fileURLToPath } from 'url';
+import { join, dirname } from 'path';
 import { ApolloServer } from '@apollo/server';
 import { ApolloServerPluginLandingPageLocalDefault } from '@apollo/server/plugin/landingPage/default';
 import { expressMiddleware } from '@as-integrations/express5';
@@ -68,6 +70,13 @@ export async function createApp({ logger }) {
 
   // Apply CORS globally before all other middleware.
   app.use(cors(corsOptions));
+
+  // ── Static brand assets (logo, etc.) ─────────────────────────────────────
+  const __dirname = dirname(fileURLToPath(import.meta.url));
+  app.use('/static', express.static(join(__dirname, '../../public'), {
+    maxAge: '30d',
+    immutable: true,
+  }));
 
   // ── Media / upload proxy ──────────────────────────────────────────────────
   // Must be registered BEFORE express.json() so the raw multipart body is
@@ -348,6 +357,33 @@ export async function createApp({ logger }) {
     } catch (err) {
       logger.warn(`docker-admin proxy error: ${err.message}`);
       res.status(502).json({ error: 'docker-mgmt unavailable' });
+    }
+  });
+
+  // ── Mailbox management proxy ─────────────────────────────────────────────
+  // Forwards /mail-admin/* → mail-mgmt service (mailbox credential store +
+  // one-time SOGo webmail SSO token minting). The actual /sso/:token landing
+  // page is hit directly at mail.sixbyfive.com, not through this proxy.
+  const MAIL_MGMT_URL = process.env.MAIL_MGMT_SERVICE_URL || 'http://mail-mgmt:4031';
+  app.use('/mail-admin', async (req, res) => {
+    const target = `${MAIL_MGMT_URL}${req.url === '/' ? '' : req.url}`;
+    try {
+      const forwardHeaders = { 'Content-Type': 'application/json' };
+      if (req.headers['x-admin-key']) forwardHeaders['x-admin-key'] = req.headers['x-admin-key'];
+
+      const upstream = await fetch(target, {
+        method: req.method,
+        headers: forwardHeaders,
+        body: ['GET', 'HEAD'].includes(req.method) ? undefined : JSON.stringify(req.body),
+      });
+
+      const contentType = upstream.headers.get('content-type') || '';
+      res.status(upstream.status);
+      if (contentType) res.setHeader('content-type', contentType);
+      res.send(await upstream.text());
+    } catch (err) {
+      logger.warn(`mail-admin proxy error: ${err.message}`);
+      res.status(502).json({ error: 'mail-mgmt unavailable' });
     }
   });
 

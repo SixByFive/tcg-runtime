@@ -65,6 +65,7 @@ services:
       MESSAGING_SERVICE_URL: http://messaging-service:4022
       SHIPPING_SERVICE_URL: http://shipping-service:4023
       DOCKER_MGMT_SERVICE_URL: http://docker-mgmt:4030
+      MAIL_MGMT_SERVICE_URL: http://host.docker.internal:4031
     ports:
       - "4010:4010"
     depends_on:
@@ -212,6 +213,7 @@ services:
       SHARP_CONCURRENCY: "1"
       NODE_ENV: production
       NODE_OPTIONS: --max-old-space-size=256
+      ACCESS_TOKEN_SECRET: ${ACCESS_TOKEN_SECRET:-}
     expose:
       - "4017"
     volumes:
@@ -489,7 +491,7 @@ services:
     mem_limit: 256m
     mem_reservation: 128m
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:4001/health"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:4001/healthz"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -519,6 +521,37 @@ services:
       retries: 3
       start_period: 10s
 
+  mail-mgmt:
+    container_name: MailMgmt
+    build:
+      context: ../..
+      dockerfile: apps/mail-mgmt/Dockerfile
+    restart: unless-stopped
+    # Mailcow's nginx publishes 127.0.0.1:8080/8443 — loopback-only, so it
+    # rejects connections arriving from the docker bridge gateway IP
+    # (host.docker.internal). Host networking makes our 127.0.0.1 the real
+    # host loopback, so the SOGo connect call actually reaches it.
+    network_mode: host
+    environment:
+      SERVICE_NAME: mail-mgmt
+      ADMIN_API_KEY: ${ADMIN_API_KEY:-change_me_admin_key}
+      MAIL_ENCRYPTION_KEY: ${MAIL_ENCRYPTION_KEY:-}
+      SOGO_CONNECT_URL: ${SOGO_CONNECT_URL:-http://127.0.0.1:8080/SOGo/connect}
+      MAILBOX_STORE_PATH: /data/mailboxes.enc.json
+      PORT: "4031"
+      NODE_ENV: production
+    volumes:
+      - mail_mgmt_data:/data
+    mem_limit: 128m
+    mem_reservation: 32m
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:4031/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
 volumes:
   redis_data:
   media_uploads:
+  mail_mgmt_data:

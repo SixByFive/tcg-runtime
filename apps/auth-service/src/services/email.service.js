@@ -1,9 +1,14 @@
 import nodemailer from 'nodemailer';
 import { createLogger } from '@sbf/logger';
+import {
+  verificationEmail,
+  welcomeEmail,
+  passwordResetEmail,
+  emailChangeEmail,
+} from './email.templates.js';
 
 const logger = createLogger('auth-service:email');
 const FROM = process.env.EMAIL_FROM || 'noreply@sixbyfive.app';
-const APP_URL = process.env.APP_URL || 'http://localhost:3000';
 
 function getTransport() {
   return nodemailer.createTransport({
@@ -29,45 +34,21 @@ async function send(to, subject, html) {
 }
 
 export async function sendVerificationEmail(user, token) {
-  const url = `${APP_URL}/verify-email?token=${token}`;
-  await send(
-    user.email,
-    'Verify your SixByFive email',
-    `<p>Hi ${user.username},</p>
-     <p>Verify your email address by clicking the link below. It expires in 24 hours.</p>
-     <p><a href="${url}">${url}</a></p>`,
-  );
+  const { subject, html } = verificationEmail(user, token);
+  await send(user.email, subject, html);
 }
 
 export async function sendWelcomeEmail(user) {
-  await send(
-    user.email,
-    'Welcome to SixByFive!',
-    `<p>Hi ${user.username},</p>
-     <p>Welcome to SixByFive — your trading card game marketplace.</p>
-     <p>Start exploring cards, building your collection, and trading with others.</p>`,
-  );
+  const { subject, html } = welcomeEmail(user);
+  await send(user.email, subject, html);
 }
 
 export async function sendPasswordResetEmail(user, token) {
-  const url = `${APP_URL}/reset-password?token=${token}`;
-  await send(
-    user.email,
-    'Reset your SixByFive password',
-    `<p>Hi ${user.username},</p>
-     <p>You requested a password reset. Click the link below — it expires in 1 hour.</p>
-     <p><a href="${url}">${url}</a></p>
-     <p>If you didn't request this, you can safely ignore this email.</p>`,
-  );
+  const { subject, html } = passwordResetEmail(user, token);
+  await send(user.email, subject, html);
 }
 
 export async function sendEmailChangeEmail(user, token, newEmail) {
-  const url = `${APP_URL}/verify-email?token=${token}`;
-  await send(
-    newEmail,
-    'Verify your new SixByFive email',
-    `<p>Hi ${user.username},</p>
-     <p>Verify your new email address by clicking the link below. It expires in 24 hours.</p>
-     <p><a href="${url}">${url}</a></p>`,
-  );
+  const { subject, html } = emailChangeEmail(user, token, newEmail);
+  await send(newEmail, subject, html);
 }

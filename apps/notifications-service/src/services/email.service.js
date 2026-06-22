@@ -1,9 +1,16 @@
 import nodemailer from 'nodemailer';
 import { createLogger } from '@sbf/logger';
+import {
+  notificationEmail,
+  digestEmail,
+  subscriptionActivatedEmail,
+  subscriptionPaymentFailedEmail,
+  subscriptionEndedEmail,
+  walletToppedUpEmail,
+} from './email.templates.js';
 
 const logger = createLogger('notifications-service:email');
 const FROM = process.env.EMAIL_FROM || 'noreply@sixbyfive.app';
-const APP_URL = process.env.APP_URL || 'https://tcg.sixbyfive.com';
 
 function getTransport() {
   return nodemailer.createTransport({
@@ -28,53 +35,37 @@ async function send(to, subject, html) {
   }
 }
 
-function esc(str) {
-  return String(str ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+function buildNotificationHtml(notification) {
+  const type = notification.type?.toLowerCase();
+  const body = notification.body ?? '';
+  const link = notification.linkUrl;
+
+  if (type === 'subscription') {
+    const isEnded = /ended|cancelled|cancel/i.test(notification.title);
+    if (isEnded) return subscriptionEndedEmail({ planName: extractPlanName(notification.body), linkUrl: link });
+    return subscriptionActivatedEmail({ planName: extractPlanName(notification.title), linkUrl: link });
+  }
+  if (type === 'payment_failure') return subscriptionPaymentFailedEmail({ linkUrl: link });
+  if (type === 'payment_success' && /wallet/i.test(body)) {
+    const match = body.match(/£([\d.]+)/);
+    return walletToppedUpEmail({ amount: match ? match[1] : '0.00', linkUrl: link });
+  }
+  return notificationEmail(notification);
 }
 
-function baseTemplate(title, bodyHtml) {
-  return `<!DOCTYPE html><html><body style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:16px">
-    <h2 style="color:#1a1a2e">${esc(title)}</h2>
-    ${bodyHtml}
-    <hr style="margin-top:32px"/>
-    <p style="font-size:12px;color:#888">
-      <a href="${APP_URL}/notifications">Manage notification preferences</a>
-    </p>
-  </body></html>`;
-}
-
-function buildHtml(notification) {
-  const { type, title, body, linkUrl } = notification;
-  let cta = '';
-  if (linkUrl) {
-    cta = `<p><a href="${APP_URL}${esc(linkUrl)}" style="background:#4f46e5;color:#fff;padding:8px 16px;border-radius:4px;text-decoration:none">View</a></p>`;
-  }
-
-  switch (type) {
-    case 'price_alert':
-      return baseTemplate(title, `<p>${esc(body)}</p>${cta}`);
-    case 'trade_offer':
-      return baseTemplate(title, `<p>${esc(body)}</p>${cta}`);
-    case 'trade_complete':
-      return baseTemplate(title, `<p>${esc(body)}</p>${cta}`);
-    case 'achievement_unlocked':
-      return baseTemplate(title, `<p>🏆 ${esc(body)}</p>${cta}`);
-    case 'listing_sold':
-      return baseTemplate(title, `<p>${esc(body)}</p>${cta}`);
-    case 'ORDER_PLACED_BUYER':
-    case 'ORDER_PLACED_SELLER':
-    case 'ORDER_FULFILMENT_IN_PRINTING':
-    case 'ORDER_FULFILMENT_SHIPPED':
-      return baseTemplate(title, `<p>${esc(body)}</p>${cta}`);
-    default:
-      return baseTemplate(title, `<p>${esc(body)}</p>${cta}`);
-  }
+function extractPlanName(str) {
+  // Pull plan name from strings like "You're subscribed to Pro!" or "Your Pro subscription..."
+  const m = String(str ?? '').match(/subscribed to (.+?)[\s!]|Your (.+?) subscription/i);
+  return m?.[1] ?? m?.[2] ?? 'your plan';
 }
 
 export async function sendNotificationEmail(notification, userEmail) {
-  const html = buildHtml(notification);
+  const html = buildNotificationHtml(notification);
   await send(userEmail, notification.title, html);
+}
+
+export async function sendDigestEmail(notifications, userEmail) {
+  const html = digestEmail(notifications);
+  const count = notifications.length;
+  await send(userEmail, `You have ${count} unread notification${count !== 1 ? 's' : ''}`, html);
 }

@@ -110,6 +110,7 @@ export async function searchCards(input = {}) {
   const q = input.name || input.query;
   if (q)            params.set('q',         q);
   if (input.setCode) params.set('setCode',  input.setCode);
+  if (input.number)  params.set('number',   input.number);
   if (input.rarity)  params.set('rarity',   input.rarity);
 
   // Pagination: GraphQL uses limit/offset, catalog-service uses pageSize/page

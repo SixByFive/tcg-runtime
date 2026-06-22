@@ -3,13 +3,14 @@ import { searchCards, getCard, getCardsByIds } from '../services/search.service.
 
 const router = Router();
 
-// GET /cards?q=pikachu&setCode=sv08&rarity=Rare&withPrices=true&page=1&pageSize=50
+// GET /cards?q=pikachu&setCode=sv08&number=004&rarity=Rare&withPrices=true&page=1&pageSize=50
 router.get('/', async (req, res) => {
   try {
-    const { q, setCode, rarity, supertype, withPrices, page, pageSize } = req.query;
+    const { q, setCode, number, rarity, supertype, withPrices, page, pageSize } = req.query;
     const result = await searchCards({
       q,
       setCode,
+      number,
       rarity,
       supertype,
       withPrices: withPrices === 'true' || withPrices === '1',
