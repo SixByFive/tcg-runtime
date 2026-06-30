@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { Op } from 'sequelize';
+import { Op, Sequelize } from 'sequelize';
 import { requireAdminKey } from '../middleware/requireAdminKey.js';
 import { Scheduler } from '../scheduler/index.js';
 import { seedStandardTasks, STANDARD_TASKS } from '../scheduler/seedTasks.js';
@@ -8,7 +8,7 @@ import { collectPrices } from '../jobs/collectPrices.job.js';
 import { fxDaily } from '../jobs/fxDaily.job.js';
 import { rebuildPriceRollups } from '../jobs/rollup.job.js';
 import { getFx } from '../services/fx.service.js';
-import { Set } from '../models/index.js';
+import { Set, Card } from '../models/index.js';
 import { ALIASES } from '../seed/setAliases.js';
 
 const router = Router();
@@ -198,7 +198,26 @@ router.get('/sets', async (req, res) => {
       where, limit, offset, order: [['release_date', 'DESC']],
       attributes: ['code', 'name', 'era', 'release_date', 'abbreviation', 'official_count', 'total_cards'],
     });
-    res.json({ total: count, page: Number(page), pageSize: limit, sets: rows.map(r => r.toJSON()) });
+
+    // total_cards/official_count come from upstream set metadata and can
+    // stay null for a while after a set releases — they don't reflect what
+    // we've actually ingested. Count real m_cards rows too so this page
+    // (whose whole purpose is ingestion status) doesn't show "—" for sets
+    // that already have cards.
+    const codes = rows.map(r => r.code);
+    let ingestedByCode = {};
+    if (codes.length) {
+      const counts = await Card.findAll({
+        where: { set_code: { [Op.in]: codes } },
+        attributes: ['set_code', [Sequelize.fn('COUNT', Sequelize.col('id')), 'cnt']],
+        group: ['set_code'],
+        raw: true,
+      });
+      ingestedByCode = Object.fromEntries(counts.map(c => [c.set_code, Number(c.cnt)]));
+    }
+
+    const sets = rows.map(r => ({ ...r.toJSON(), ingested_cards: ingestedByCode[r.code] ?? 0 }));
+    res.json({ total: count, page: Number(page), pageSize: limit, sets });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

@@ -299,6 +299,16 @@ export async function adminGetUsers(token, { limit = 100, offset = 0, search } =
   return data?.users ?? [];
 }
 
+// /admin/users always computes the full match count server-side regardless
+// of limit — reuse it with limit=1 to avoid pulling every user row over
+// the wire just to get a count.
+export async function adminGetUserCount(token) {
+  const data = await request('/admin/users?limit=1', {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return Number(data?.total ?? 0);
+}
+
 export async function adminBanUser(token, id) {
   await request(`/admin/users/${encodeURIComponent(id)}/ban`, {
     method: 'POST',

@@ -66,6 +66,7 @@ type Query {
   userRewards(userId: ID!): [Reward!]!
   auditLogs(userId: ID, action: String, targetId: String, targetType: String, page: Int, pageSize: Int): [AuditLog!]!
   allUsers(limit: Int, offset: Int): [AdminUser!]!
+  adminUserCount: Int!
   adminNotifications(page: Int, pageSize: Int, userId: ID, type: String): NotificationPage!
   adminBinders(limit: Int, offset: Int): [AdminBinder!]!
   adminUserCollections(limit: Int, search: String): [UserCollectionSummary!]!
@@ -1045,6 +1046,7 @@ type AdminUser {
 type AdminBinder {
   id: ID!
   userId: ID
+  username: String
   name: String
   visibility: String
   isDeleted: Boolean

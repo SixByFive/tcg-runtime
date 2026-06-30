@@ -98,15 +98,21 @@ router.get('/admin', requireAdmin, async (req, res) => {
     const limit       = Math.min(Number(req.query.limit) || 200, 500);
     const offset      = Number(req.query.offset) || 0;
     const showDeleted = req.query.showDeleted === 'true';
-    const where       = showDeleted ? {} : { isDeleted: false };
-    const binders = await Binder.findAll({
-      where,
-      attributes: ['id', 'userId', 'name', 'visibility', 'isDeleted', 'createdAt'],
-      order: [['createdAt', 'DESC']],
-      limit,
-      offset,
-    });
-    res.json(binders);
+
+    // Raw query (rather than the Binder model) so we can JOIN the users
+    // table — same physical DB as collections-service — to resolve
+    // userId -> username for display, same pattern as /collection/admin/summary.
+    const [rows] = await sequelize.query(
+      `SELECT
+         b.id, b.\`userId\`, u.username, b.name, b.visibility, b.\`isDeleted\`, b.\`createdAt\`
+       FROM binders b
+       LEFT JOIN users u ON u.id = b.\`userId\`
+       ${showDeleted ? '' : 'WHERE b.`isDeleted` = false'}
+       ORDER BY b.\`createdAt\` DESC
+       LIMIT :limit OFFSET :offset`,
+      { replacements: { limit, offset } },
+    );
+    res.json(rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

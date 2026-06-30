@@ -542,6 +542,15 @@ export const resolvers = {
       }
     },
 
+    adminUserCount: async (_, __, { token, clients, logger }) => {
+      try {
+        return await clients.users.adminGetUserCount(token);
+      } catch (error) {
+        logger.warn(`adminUserCount failed: ${error.message}`);
+        return 0;
+      }
+    },
+
     adminBinders: async (_, args, { token, clients, logger }) => {
       try {
         return await clients.collections.adminGetBinders(token, args);

@@ -132,6 +132,7 @@ export const typeDefs = gql`
 
     # ── Admin ─────────────────────────────────────────────────────────────────────
     allUsers(limit: Int, offset: Int, search: String): [AdminUser!]!
+    adminUserCount: Int!
     adminNotifications(page: Int, pageSize: Int, userId: ID, type: String): NotificationPage!
     adminBinders(limit: Int, offset: Int): [AdminBinder!]!
     adminUserCollections(limit: Int, search: String): [UserCollectionSummary!]!
@@ -1680,6 +1681,7 @@ export const typeDefs = gql`
   type AdminBinder {
     id: ID!
     userId: ID
+    username: String
     name: String
     visibility: String
     isDeleted: Boolean

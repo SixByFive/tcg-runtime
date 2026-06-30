@@ -6,7 +6,7 @@ services:
     image: louislam/uptime-kuma:1
     restart: unless-stopped
     ports:
-      - "3001:3001"
+      - "100.76.185.9:3001:3001"
     volumes:
       - uptime_kuma_data:/app/data
       - /var/run/docker.sock:/var/run/docker.sock:ro
