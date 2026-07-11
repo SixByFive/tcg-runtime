@@ -3,6 +3,7 @@
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { backoffDelay } from '@sbf/utils';
 
 const ECB_90D_XML = process.env.ECB_90D_XML || 'https://www.ecb.europa.eu/stats/eurofxref/eurofxref-hist-90d.xml';
 const CACHE_DIR = process.env.FX_CACHE_DIR || '/tmp/sbf-fx-cache';
@@ -118,7 +119,7 @@ async function fetchWithRetry(url, { retries = 3 } = {}) {
       return await res.text();
     } catch (err) {
       lastErr = err;
-      if (i < retries) await new Promise(r => setTimeout(r, 400 * Math.pow(1.6, i)));
+      if (i < retries) await backoffDelay(i);
     }
   }
   throw lastErr;

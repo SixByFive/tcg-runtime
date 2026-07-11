@@ -200,3 +200,53 @@ export const RealtimeEvent = {
   BROADCAST:           'broadcast',
   SYSTEM:              'system',
 };
+
+// ─── Status enums ─────────────────────────────────────────────────────────────
+// Single source of truth for status strings used across services.
+// Must stay in sync with the corresponding Sequelize ENUM definitions in each
+// service's model files.
+
+export const ListingStatus = {
+  DRAFT:         'DRAFT',
+  PENDING_PROOF: 'PENDING_PROOF',
+  ACTIVE:        'ACTIVE',
+  SOLD:          'SOLD',
+  CANCELLED:     'CANCELLED',
+  REMOVED:       'REMOVED',
+};
+
+export const OfferStatus = {
+  PENDING:   'pending',
+  ACCEPTED:  'accepted',
+  DECLINED:  'declined',
+  COUNTERED: 'countered',
+  EXPIRED:   'expired',
+  WITHDRAWN: 'withdrawn',
+};
+
+export const OrderPaymentStatus = {
+  PENDING:    'pending',
+  AUTHORISED: 'authorised',
+  CAPTURED:   'captured',
+  REFUNDED:   'refunded',
+  CANCELLED:  'cancelled',
+};
+
+export const OrderFulfilmentStatus = {
+  AWAITING_SHIPMENT: 'awaiting_shipment',
+  SHIPPED:           'shipped',
+  COMPLETED:         'completed',
+  CANCELLED:         'cancelled',
+};
+
+export const TradeStatus = {
+  INITIATED:     'INITIATED',
+  NEGOTIATING:   'NEGOTIATING',
+  AGREED:        'AGREED',
+  PROOF_PENDING: 'PROOF_PENDING',
+  LOCKED:        'LOCKED',
+  IN_TRANSIT:    'IN_TRANSIT',
+  COMPLETED:     'COMPLETED',
+  CANCELLED:     'CANCELLED',
+  DISPUTED:      'DISPUTED',
+};

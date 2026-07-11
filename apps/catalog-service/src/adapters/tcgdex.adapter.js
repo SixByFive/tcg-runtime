@@ -1,20 +1,31 @@
 // TCGdex adapter — fetch set metadata + cards from TCGdex v2 API.
 // Uses native fetch (Node 20+). No file cache in new service (DB is source of truth).
 
+import { backoffDelay } from '@sbf/utils';
 import { normalizeSetFromTcgdex, normalizeCardFromTcgdex, detectVariantsWithNames } from '../services/normalizer.service.js';
 import { resolveSet } from '../services/set.service.js';
 
 const BASE = process.env.TCGDEX_BASE || 'https://api.tcgdex.net/v2';
 const LANG = 'en';
-const DETAIL_CONCURRENCY = 8;
-const DETAIL_DELAY_MS = 120;
+
+// Parallel card-detail fetches per batch. TCGdex public API tolerates ~8
+// concurrent; reduce if you see 429s during ingestion.
+const DETAIL_CONCURRENCY = Number(process.env.TCGDEX_DETAIL_CONCURRENCY || 8);
+
+// Inter-batch pause between card-detail groups. 120 ms keeps request rate
+// below ~67 rps — empirically safe for TCGdex's rate limiter.
+const DETAIL_DELAY_MS = Number(process.env.TCGDEX_DETAIL_DELAY_MS || 120);
+
+// Abort a single TCGdex fetch after this many ms. 15 s covers TCGdex's
+// occasional slow responses without blocking ingestion indefinitely.
+const FETCH_TIMEOUT_MS = Number(process.env.TCGDEX_FETCH_TIMEOUT_MS || 15000);
 
 async function fetchJson(url, { tries = 3 } = {}) {
   let lastErr;
   for (let i = 0; i < tries; i++) {
     try {
       const ctrl = new AbortController();
-      const to = setTimeout(() => ctrl.abort(), 15000);
+      const to = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
       const res = await fetch(url, { signal: ctrl.signal });
       clearTimeout(to);
       if (!res.ok) {
@@ -24,7 +35,7 @@ async function fetchJson(url, { tries = 3 } = {}) {
       return await res.json();
     } catch (e) {
       lastErr = e;
-      if (i < tries - 1) await new Promise(r => setTimeout(r, 400 * Math.pow(1.6, i)));
+      if (i < tries - 1) await backoffDelay(i);
     }
   }
   return null;

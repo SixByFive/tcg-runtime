@@ -9,7 +9,7 @@
  */
 import { Op } from 'sequelize';
 import { MarketplaceOffer, CardListing } from '../models/index.js';
-import { notifyUser, NotificationType } from '@sbf/contracts';
+import { notifyUser, NotificationType, OfferStatus } from '@sbf/contracts';
 import { createLogger } from '@sbf/logger';
 
 const logger = createLogger('worker:offer-expiry');
@@ -20,7 +20,7 @@ export async function runOfferExpiryJob() {
   try {
     const stale = await MarketplaceOffer.findAll({
       where: {
-        status:    { [Op.in]: ['pending', 'countered'] },
+        status:    { [Op.in]: [OfferStatus.PENDING, OfferStatus.COUNTERED] },
         expiresAt: { [Op.lt]: new Date() },
       },
       include: [{ model: CardListing, attributes: ['title'], required: false }],
@@ -33,7 +33,7 @@ export async function runOfferExpiryJob() {
     }
 
     const ids = stale.map((o) => o.id);
-    await MarketplaceOffer.update({ status: 'expired' }, { where: { id: ids } });
+    await MarketplaceOffer.update({ status: OfferStatus.EXPIRED }, { where: { id: ids } });
 
     // Notify buyers
     for (const offer of stale) {
