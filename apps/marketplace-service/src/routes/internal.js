@@ -3,6 +3,7 @@ import { Op } from 'sequelize';
 import { createLogger } from '@sbf/logger';
 import { Order } from '../models/index.js';
 import { capturePaymentIntent, cancelPaymentIntent } from '../services/stripe.service.js';
+import { relistListing } from '../services/listing.service.js';
 import { notifyUser, NotificationType } from '@sbf/contracts';
 
 const logger = createLogger('marketplace-service:internal');
@@ -152,12 +153,7 @@ router.post('/auto-cancel-pending', async (req, res) => {
 
         // Restore listing quantity
         const { CardListing } = await import('../models/index.js');
-        const listing = await CardListing.findByPk(order.listingId);
-        if (listing && listing.status === 'SOLD') {
-          await listing.update({ status: 'ACTIVE', soldAt: null });
-        } else if (listing && listing.status === 'ACTIVE') {
-          await listing.increment('quantity');
-        }
+        await relistListing(await CardListing.findByPk(order.listingId));
 
         results.cancelled.push(order.id);
         logger.info(`Auto-cancelled pending order ${order.id}`);

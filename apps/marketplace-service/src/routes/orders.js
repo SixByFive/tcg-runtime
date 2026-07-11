@@ -8,6 +8,7 @@ import {
 } from '../services/stripe.service.js';
 import { notifyUser, NotificationType } from '@sbf/contracts';
 import { recalcReputation } from '../services/reputation.service.js';
+import { relistListing } from '../services/listing.service.js';
 
 const SHIPPING_SERVICE_URL = getServiceUrl('SHIPPING_SERVICE_URL', 4023);
 const INTERNAL_KEY         = process.env.INTERNAL_API_KEY;
@@ -491,12 +492,7 @@ router.post('/:id/cancel', requireAuth, async (req, res) => {
     });
 
     // Restore listing if possible
-    const listing = await CardListing.findByPk(order.listingId);
-    if (listing && listing.status === 'SOLD') {
-      await listing.update({ status: 'ACTIVE', soldAt: null });
-    } else if (listing && listing.status === 'ACTIVE') {
-      await listing.increment('quantity');
-    }
+    await relistListing(await CardListing.findByPk(order.listingId));
 
     const otherId = req.user.sub === order.buyerId ? order.sellerId : order.buyerId;
     await notifyUser({

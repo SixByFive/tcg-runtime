@@ -3,6 +3,7 @@ import { Order, SellerProfile, CardListing } from '../models/index.js';
 import { constructWebhookEvent } from '../services/stripe.service.js';
 import { notifyUser, NotificationType } from '@sbf/contracts';
 import { getServiceUrl } from '@sbf/config';
+import { relistListing } from '../services/listing.service.js';
 import { createLogger } from '@sbf/logger';
 
 const logger = createLogger('marketplace-service:webhooks');
@@ -103,12 +104,7 @@ router.post('/stripe', async (req, res) => {
 
         // Relist — payment never completed so the card was never sold
         if (order.listingId) {
-          const listing = await CardListing.findByPk(order.listingId);
-          if (listing && listing.status === 'SOLD') {
-            await listing.update({ status: 'ACTIVE', soldAt: null });
-          } else if (listing && listing.status === 'ACTIVE') {
-            await listing.increment('quantity');
-          }
+          await relistListing(await CardListing.findByPk(order.listingId));
         }
 
         await notifyUser({
@@ -134,12 +130,7 @@ router.post('/stripe', async (req, res) => {
 
         // Relist — PI was voided before any capture, card was never sold
         if (order.listingId) {
-          const listing = await CardListing.findByPk(order.listingId);
-          if (listing && listing.status === 'SOLD') {
-            await listing.update({ status: 'ACTIVE', soldAt: null });
-          } else if (listing && listing.status === 'ACTIVE') {
-            await listing.increment('quantity');
-          }
+          await relistListing(await CardListing.findByPk(order.listingId));
         }
         break;
       }
