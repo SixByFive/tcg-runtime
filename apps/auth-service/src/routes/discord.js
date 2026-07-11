@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import jwt from 'jsonwebtoken';
+import { getServiceUrl } from '@sbf/config';
 import { requireAuth } from '../middleware/requireAuth.js';
 import {
   buildAuthorizeUrl,
@@ -103,7 +104,7 @@ router.get('/callback', async (req, res) => {
   // Verify user can still connect Discord (capability may have changed since /start)
   try {
     const profileRes = await fetch(
-      `${process.env.USER_SERVICE_URL || 'http://localhost:4021'}/users/profile-by-id/${encodeURIComponent(userId)}`,
+      `${getServiceUrl('USER_SERVICE_URL', 4021)}/users/profile-by-id/${encodeURIComponent(userId)}`,
       { headers: { 'x-internal-key': process.env.INTERNAL_API_KEY || '' } },
     );
     if (profileRes.ok) {

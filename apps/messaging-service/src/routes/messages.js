@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { Op } from 'sequelize';
 import { requireAuth, requireAdmin } from '@sbf/auth';
 import { notifyUser } from '@sbf/contracts';
+import { getServiceUrl } from '@sbf/config';
 import { createLogger } from '@sbf/logger';
 import {
   Message,
@@ -19,7 +20,7 @@ const CHAT_RULES =
   'Be respectful. No harassment, hate speech, or threats. No sharing personal info. No scams/spam. Report abusive behaviour.';
 
 async function pushRealtime(userId, event, data) {
-  const url = process.env.REALTIME_SERVICE_URL || 'http://localhost:4018';
+  const url = getServiceUrl('REALTIME_SERVICE_URL', 4018);
   const key = process.env.INTERNAL_API_KEY;
   if (!key) return;
   await fetch(`${url}/internal/push`, {

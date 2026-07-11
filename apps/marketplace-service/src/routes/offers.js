@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { requireAuth } from '../middleware/auth.js';
+import { requireAuth } from '@sbf/auth';
 import { CardListing, Offer, Order, SellerProfile, UserProfile } from '../models/index.js';
 import { createEscrowPaymentIntent } from '../services/stripe.service.js';
 import { calculateFeeForSeller } from '../services/fees.service.js';

@@ -39,6 +39,10 @@ export function getServicePort(envKey, fallbackPort) {
   return Number(process.env[envKey] || fallbackPort);
 }
 
+export function getServiceUrl(envKey, fallbackPort) {
+  return process.env[envKey] || `http://localhost:${fallbackPort}`;
+}
+
 export function getSharedConfig() {
   return {
     nodeEnv: process.env.NODE_ENV || 'development',

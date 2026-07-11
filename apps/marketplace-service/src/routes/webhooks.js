@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { Order, SellerProfile, CardListing } from '../models/index.js';
 import { constructWebhookEvent } from '../services/stripe.service.js';
 import { notifyUser, NotificationType } from '@sbf/contracts';
+import { getServiceUrl } from '@sbf/config';
 import { createLogger } from '@sbf/logger';
 
 const logger = createLogger('marketplace-service:webhooks');
@@ -83,7 +84,7 @@ router.post('/stripe', async (req, res) => {
 
         // Refund any wallet contribution the buyer already paid
         if (order.walletAmountPence > 0) {
-          const paymentsUrl = process.env.PAYMENTS_SERVICE_URL || 'http://localhost:4019';
+          const paymentsUrl = getServiceUrl('PAYMENTS_SERVICE_URL', 4019);
           const key         = process.env.INTERNAL_API_KEY;
           await fetch(`${paymentsUrl}/internal/wallet/refund-purchase`, {
             method:  'POST',

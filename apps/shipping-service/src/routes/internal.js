@@ -15,6 +15,7 @@ import { createLogger }                          from '@sbf/logger';
 import { ShippingLabel }                         from '../models/index.js';
 import { getTrackingEvents, getQuotes, bookLabel, parcelSizeToDimensions } from '../parcel2go.js';
 import { Op }                                    from 'sequelize';
+import { getServiceUrl }                         from '@sbf/config';
 
 const router = Router();
 const logger = createLogger('shipping-service:internal');
@@ -40,7 +41,7 @@ router.use((req, res, next) => {
 // Returns a summary of how many labels were refreshed and how many changed.
 
 const TERMINAL_STATUSES = new Set(['delivered', 'returned', 'failed_delivery']);
-const NOTIFICATIONS_URL  = process.env.NOTIFICATIONS_SERVICE_URL || 'http://localhost:4025';
+const NOTIFICATIONS_URL  = getServiceUrl('NOTIFICATIONS_SERVICE_URL', 4016);
 const INTERNAL_HEADERS   = () => ({
   'Content-Type': 'application/json',
   ...(INTERNAL_KEY ? { 'x-internal-key': INTERNAL_KEY } : {}),
@@ -82,8 +83,8 @@ async function getBuyerUserId(label) {
   if (!label.relatedType || !label.relatedId) return null;
 
   const serviceUrl = label.relatedType === 'Order'
-    ? (process.env.MARKETPLACE_SERVICE_URL || 'http://localhost:4021')
-    : (process.env.TRADING_SERVICE_URL      || 'http://localhost:4022');
+    ? getServiceUrl('MARKETPLACE_SERVICE_URL', 4014)
+    : getServiceUrl('TRADING_SERVICE_URL',     4015);
 
   const path = label.relatedType === 'Order'
     ? `/internal/marketplace/orders/${label.relatedId}/buyer`

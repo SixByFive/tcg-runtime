@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { Op } from 'sequelize';
-import { requireAuth } from '../middleware/auth.js';
+import { requireAuth } from '@sbf/auth';
+import { getServiceUrl } from '@sbf/config';
 import { Order, OrderDispute, CardListing, OwnershipRecord, UserReputation, SellerProfile } from '../models/index.js';
 import {
   capturePaymentIntent, cancelPaymentIntent, refundPaymentIntent, createEscrowPaymentIntent,
@@ -8,7 +9,7 @@ import {
 import { notifyUser, NotificationType } from '@sbf/contracts';
 import { recalcReputation } from '../services/reputation.service.js';
 
-const SHIPPING_SERVICE_URL = process.env.SHIPPING_SERVICE_URL || 'http://localhost:4023';
+const SHIPPING_SERVICE_URL = getServiceUrl('SHIPPING_SERVICE_URL', 4023);
 const INTERNAL_KEY         = process.env.INTERNAL_API_KEY;
 
 async function bookShippingLabel({ orderId, sellerId, from, to, parcelSize, declaredValue }) {
@@ -205,7 +206,7 @@ router.post('/:id/received', requireAuth, async (req, res) => {
         (Number(order.salePrice) + Number(order.shippingCost)) * 100
       ) - Math.round(Number(order.platformFee) * 100) - labelQuotePence;
       if (netPence > 0) {
-        const paymentsUrl = process.env.PAYMENTS_SERVICE_URL || 'http://localhost:4019';
+        const paymentsUrl = getServiceUrl('PAYMENTS_SERVICE_URL', 4019);
         const key         = process.env.INTERNAL_API_KEY;
         await fetch(`${paymentsUrl}/internal/wallet/credit`, {
           method:  'POST',
@@ -464,7 +465,7 @@ router.post('/:id/cancel', requireAuth, async (req, res) => {
 
     // Refund wallet portion
     if (order.walletAmountPence > 0) {
-      const paymentsUrl = process.env.PAYMENTS_SERVICE_URL || 'http://localhost:4019';
+      const paymentsUrl = getServiceUrl('PAYMENTS_SERVICE_URL', 4019);
       const key = process.env.INTERNAL_API_KEY;
       await fetch(`${paymentsUrl}/internal/wallet/refund-purchase`, {
         method:  'POST',
@@ -539,7 +540,7 @@ router.post('/:id/apply-wallet', requireAuth, async (req, res) => {
     const walletPence = Math.min(walletAmountPence, totalPence);
     const cardPence   = totalPence - walletPence;
 
-    const paymentsUrl = process.env.PAYMENTS_SERVICE_URL || 'http://localhost:4019';
+    const paymentsUrl = getServiceUrl('PAYMENTS_SERVICE_URL', 4019);
     const key         = process.env.INTERNAL_API_KEY;
 
     // Deduct from wallet

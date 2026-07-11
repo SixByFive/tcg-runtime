@@ -1,3 +1,4 @@
+import { getServiceUrl } from '@sbf/config';
 import { createLogger } from '@sbf/logger';
 
 const logger = createLogger('marketplace-service:fees');
@@ -13,7 +14,7 @@ const FREE_TIER_FEE_PCT = 7;
 export async function getSellerFeePercent(sellerId) {
   if (!sellerId) return FREE_TIER_FEE_PCT;
 
-  const paymentsUrl = process.env.PAYMENTS_SERVICE_URL || 'http://localhost:4019';
+  const paymentsUrl = getServiceUrl('PAYMENTS_SERVICE_URL', 4019);
   const key         = process.env.INTERNAL_API_KEY;
 
   try {

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { Op } from 'sequelize';
-import { requireAuth } from '../middleware/auth.js';
+import { requireAuth } from '@sbf/auth';
 import { SellerProfile, CardListing, UserReputation } from '../models/index.js';
 import {
   createConnectOnboardingUrl,

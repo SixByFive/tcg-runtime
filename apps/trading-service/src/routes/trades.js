@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { Op } from 'sequelize';
 import rateLimit from 'express-rate-limit';
 import { requireAuth } from '@sbf/auth';
+import { getServiceUrl } from '@sbf/config';
 import { notifyUser, NotificationType, checkCapabilities } from '@sbf/contracts';
 import {
   Trade, TradeCard, TradeProof, TradeDispute,
@@ -406,7 +407,7 @@ router.post('/:id/proof', async (req, res) => {
 
 // ── GET /trades/:id/quote-shipping — get P2G quote for this trade leg ────────
 
-const PAYMENTS_SERVICE_URL = process.env.PAYMENTS_SERVICE_URL || 'http://localhost:4016';
+const PAYMENTS_SERVICE_URL = getServiceUrl('PAYMENTS_SERVICE_URL', 4019);
 
 router.get('/:id/quote-shipping', async (req, res) => {
   try {
@@ -476,7 +477,7 @@ router.post('/:id/address', async (req, res) => {
 // Requires both parties to have set their addresses via /address first.
 // Books a P2G label for the caller's leg of the trade.
 
-const SHIPPING_SERVICE_URL = process.env.SHIPPING_SERVICE_URL || 'http://localhost:4023';
+const SHIPPING_SERVICE_URL = getServiceUrl('SHIPPING_SERVICE_URL', 4023);
 const INTERNAL_API_KEY     = process.env.INTERNAL_API_KEY || '';
 
 router.post('/:id/ship', async (req, res) => {

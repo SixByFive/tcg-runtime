@@ -7,7 +7,9 @@
  * All actual Parcel2Go logic lives in shipping-service/src/parcel2go.js.
  */
 
-const SHIPPING_URL = process.env.SHIPPING_SERVICE_URL || 'http://localhost:4023';
+import { getServiceUrl } from '@sbf/config';
+
+const SHIPPING_URL = getServiceUrl('SHIPPING_SERVICE_URL', 4023);
 const INTERNAL_KEY = process.env.INTERNAL_API_KEY;
 
 async function shippingRequest(path, options = {}) {

@@ -3,7 +3,8 @@ import { Op }    from 'sequelize';
 import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { join, basename } from 'node:path';
-import { requireAuth } from '../middleware/auth.js';
+import { requireAuth } from '@sbf/auth';
+import { getServiceUrl } from '@sbf/config';
 import {
   CardListing, Offer, Order, SellerProfile, OwnershipRecord, MarketplaceAgreement, UserProfile,
 } from '../models/index.js';
@@ -154,7 +155,7 @@ router.post('/', requireAuth, async (req, res) => {
 
     // ── New-set embargo: block listings for 14 days after a set's release ────
     const EMBARGO_DAYS = Number(process.env.NEW_SET_EMBARGO_DAYS ?? 14);
-    const catalogUrl   = process.env.CATALOG_SERVICE_URL || 'http://localhost:4012';
+    const catalogUrl   = getServiceUrl('CATALOG_SERVICE_URL', 4012);
     try {
       const catalogRes = await fetch(`${catalogUrl}/cards/${encodeURIComponent(cardId)}`);
       if (catalogRes.ok) {
@@ -450,7 +451,7 @@ router.post('/:id/proof', requireAuth, async (req, res) => {
     // Fetch canonical card name + set name from catalog for OCR verification
     let expectedCardName, expectedSetName;
     try {
-      const catalogUrl = process.env.CATALOG_SERVICE_URL || 'http://localhost:4012';
+      const catalogUrl = getServiceUrl('CATALOG_SERVICE_URL', 4012);
       const cardRes    = await fetch(`${catalogUrl}/cards/${encodeURIComponent(listing.cardId)}`);
       if (cardRes.ok) {
         const cardData   = await cardRes.json();
@@ -604,7 +605,7 @@ router.post('/:id/buy', requireAuth, async (req, res) => {
         attributes: ['returnPostcode'],
       });
       if (sellerProfile?.returnPostcode) {
-        const shippingUrl = process.env.SHIPPING_SERVICE_URL || 'http://localhost:4023';
+        const shippingUrl = getServiceUrl('SHIPPING_SERVICE_URL', 4023);
         const internalKey = process.env.INTERNAL_API_KEY;
         try {
           const qRes = await fetch(`${shippingUrl}/internal/shipping/quote`, {
@@ -668,7 +669,7 @@ router.post('/:id/buy', requireAuth, async (req, res) => {
 
     // Deduct wallet portion
     if (walletPence > 0) {
-      const paymentsUrl = process.env.PAYMENTS_SERVICE_URL || 'http://localhost:4019';
+      const paymentsUrl = getServiceUrl('PAYMENTS_SERVICE_URL', 4019);
       const key = process.env.INTERNAL_API_KEY;
       const walletRes = await fetch(`${paymentsUrl}/internal/wallet/spend`, {
         method: 'POST',
@@ -715,7 +716,7 @@ router.post('/:id/buy', requireAuth, async (req, res) => {
       } catch (stripeErr) {
         // Refund wallet if Stripe PI creation fails
         if (walletPence > 0) {
-          const paymentsUrl = process.env.PAYMENTS_SERVICE_URL || 'http://localhost:4019';
+          const paymentsUrl = getServiceUrl('PAYMENTS_SERVICE_URL', 4019);
           const key = process.env.INTERNAL_API_KEY;
           await fetch(`${paymentsUrl}/internal/wallet/refund-purchase`, {
             method: 'POST',

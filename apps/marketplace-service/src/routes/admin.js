@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { requireAdmin } from '../middleware/auth.js';
+import { requireAdmin } from '@sbf/auth';
 import {
   CardListing, Order, OrderDispute, OwnershipRecord, UserReputation, ProductListing, InventoryItem,
 } from '../models/index.js';

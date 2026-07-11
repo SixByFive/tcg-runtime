@@ -9,6 +9,7 @@
     "start": "cross-env SERVICE_NAME=marketplace-service node src/index.js"
   },
   "dependencies": {
+    "@sbf/auth": "workspace:*",
     "@sbf/config": "workspace:*",
     "@sbf/contracts": "workspace:*",
     "@sbf/database": "workspace:*",
