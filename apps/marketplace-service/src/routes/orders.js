@@ -6,7 +6,9 @@ import { Order, OrderDispute, CardListing, OwnershipRecord, UserReputation, Sell
 import {
   capturePaymentIntent, cancelPaymentIntent, refundPaymentIntent, createEscrowPaymentIntent,
 } from '../services/stripe.service.js';
-import { notifyUser, NotificationType } from '@sbf/contracts';
+import {
+  notifyUser, NotificationType, OrderPaymentStatus, OrderFulfilmentStatus,
+} from '@sbf/contracts';
 import { recalcReputation } from '../services/reputation.service.js';
 import { relistListing } from '../services/listing.service.js';
 
@@ -89,6 +91,7 @@ router.post('/:id/ship', requireAuth, async (req, res) => {
     const order = await Order.findByPk(req.params.id);
     if (!order) return res.status(404).json({ error: 'Order not found' });
     if (order.sellerId !== req.user.sub) return res.status(403).json({ error: 'Not your order' });
+    // 'paid' and 'pending_dispatch' are legacy statuses not in the contracts enum — kept as literals
     if (!['authorised', 'paid', 'captured'].includes(order.paymentStatus)) {
       return res.status(409).json({ error: 'Order must be paid before shipping' });
     }
@@ -139,7 +142,7 @@ router.post('/:id/ship', requireAuth, async (req, res) => {
 
     // ── Persist tracking on order
     await order.update({
-      fulfilmentStatus: 'shipped',
+      fulfilmentStatus: OrderFulfilmentStatus.SHIPPED,
       trackingNumber:   label.trackingNumber,
       trackingCarrier:  label.carrier,
       shippingLabelUrl: label.labelUrl,
@@ -181,7 +184,7 @@ router.post('/:id/received', requireAuth, async (req, res) => {
     const order = await Order.findByPk(req.params.id);
     if (!order) return res.status(404).json({ error: 'Order not found' });
     if (order.buyerId !== req.user.sub) return res.status(403).json({ error: 'Not your order' });
-    if (!['shipped'].includes(order.fulfilmentStatus)) {
+    if (order.fulfilmentStatus !== OrderFulfilmentStatus.SHIPPED) {
       return res.status(409).json({ error: 'Order has not been shipped yet' });
     }
 
@@ -191,8 +194,8 @@ router.post('/:id/received', requireAuth, async (req, res) => {
     }
 
     await order.update({
-      paymentStatus:    'captured',
-      fulfilmentStatus: 'completed',
+      paymentStatus:    OrderPaymentStatus.CAPTURED,
+      fulfilmentStatus: OrderFulfilmentStatus.COMPLETED,
       capturedAt:       new Date(),
       completedAt:      new Date(),
     });
@@ -275,7 +278,7 @@ router.post('/:id/dispute', requireAuth, async (req, res) => {
       return res.status(403).json({ error: 'Access denied' });
     }
     if (order.dispute) return res.status(409).json({ error: 'A dispute already exists for this order' });
-    if (order.fulfilmentStatus === 'completed') {
+    if (order.fulfilmentStatus === OrderFulfilmentStatus.COMPLETED) {
       return res.status(409).json({ error: 'Order is already completed' });
     }
 
@@ -316,6 +319,7 @@ router.post('/:id/evidence', requireAuth, async (req, res) => {
       return res.status(403).json({ error: 'Access denied' });
     }
     if (!order.dispute) return res.status(404).json({ error: 'No dispute found for this order' });
+    // 'open' and 'reviewing' are dispute-specific statuses not covered by contracts enums
     if (!['open', 'reviewing'].includes(order.dispute.status)) {
       return res.status(409).json({ error: 'Dispute is already resolved' });
     }
@@ -351,7 +355,7 @@ router.post('/:id/feedback', requireAuth, async (req, res) => {
     });
     if (!order) return res.status(404).json({ error: 'Order not found' });
     if (order.buyerId !== req.user.sub) return res.status(403).json({ error: 'Only the buyer can leave feedback' });
-    if (order.fulfilmentStatus !== 'completed') {
+    if (order.fulfilmentStatus !== OrderFulfilmentStatus.COMPLETED) {
       return res.status(409).json({ error: 'Order must be completed before leaving feedback' });
     }
 
@@ -420,12 +424,13 @@ router.post('/:id/dispute-review', requireAuth, async (req, res) => {
     const order = await Order.findByPk(req.params.id);
     if (!order) return res.status(404).json({ error: 'Order not found' });
     if (order.sellerId !== req.user.sub) return res.status(403).json({ error: 'Only the seller can dispute a review' });
-    if (order.fulfilmentStatus !== 'completed') {
+    if (order.fulfilmentStatus !== OrderFulfilmentStatus.COMPLETED) {
       return res.status(409).json({ error: 'Order is not completed' });
     }
 
     const listing = await CardListing.findByPk(order.listingId);
     if (!listing?.rating) return res.status(404).json({ error: 'No review found for this order' });
+    // 'disputed' and 'voided' are review-specific statuses not covered by contracts enums
     if (['disputed', 'voided'].includes(listing.reviewStatus)) {
       return res.status(409).json({ error: 'Review is already disputed or voided' });
     }
@@ -452,15 +457,15 @@ router.post('/:id/cancel', requireAuth, async (req, res) => {
     if (order.buyerId !== req.user.sub && order.sellerId !== req.user.sub) {
       return res.status(403).json({ error: 'Access denied' });
     }
-    if (['completed', 'cancelled'].includes(order.fulfilmentStatus)) {
+    if ([OrderFulfilmentStatus.COMPLETED, OrderFulfilmentStatus.CANCELLED].includes(order.fulfilmentStatus)) {
       return res.status(409).json({ error: 'Order cannot be cancelled' });
     }
-    if (order.fulfilmentStatus === 'shipped') {
+    if (order.fulfilmentStatus === OrderFulfilmentStatus.SHIPPED) {
       return res.status(409).json({ error: 'Order has already shipped — raise a dispute instead' });
     }
 
     // Cancel Stripe authorisation
-    if (order.stripePaymentIntentId && order.paymentStatus === 'authorised') {
+    if (order.stripePaymentIntentId && order.paymentStatus === OrderPaymentStatus.AUTHORISED) {
       await cancelPaymentIntent(order.stripePaymentIntentId);
     }
 
@@ -484,8 +489,8 @@ router.post('/:id/cancel', requireAuth, async (req, res) => {
     }
 
     await order.update({
-      paymentStatus:    'cancelled',
-      fulfilmentStatus: 'cancelled',
+      paymentStatus:    OrderPaymentStatus.CANCELLED,
+      fulfilmentStatus: OrderFulfilmentStatus.CANCELLED,
       cancelledAt:      new Date(),
       cancelledBy:      req.user.sub,
       cancelReason:     reason || null,
@@ -525,7 +530,7 @@ router.post('/:id/apply-wallet', requireAuth, async (req, res) => {
     const order = await Order.findByPk(req.params.id);
     if (!order) return res.status(404).json({ error: 'Order not found' });
     if (order.buyerId !== req.user.sub) return res.status(403).json({ error: 'Not your order' });
-    if (order.paymentStatus !== 'pending') {
+    if (order.paymentStatus !== OrderPaymentStatus.PENDING) {
       return res.status(409).json({ error: 'Wallet can only be applied to pending (unpaid) orders' });
     }
     if (order.walletAmountPence > 0) {
@@ -590,8 +595,8 @@ router.post('/:id/apply-wallet', requireAuth, async (req, res) => {
     } else if (cardPence === 0) {
       await order.update({
         walletAmountPence: walletPence,
-        paymentStatus:     'authorised',
-        fulfilmentStatus:  'awaiting_shipment',
+        paymentStatus:     OrderPaymentStatus.AUTHORISED,
+        fulfilmentStatus:  OrderFulfilmentStatus.AWAITING_SHIPMENT,
         authorisedAt:      new Date(),
       });
     }

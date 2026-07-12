@@ -3,7 +3,7 @@ import { requireAuth } from '@sbf/auth';
 import { CardListing, Offer, Order, SellerProfile, UserProfile } from '../models/index.js';
 import { createEscrowPaymentIntent } from '../services/stripe.service.js';
 import { calculateFeeForSeller } from '../services/fees.service.js';
-import { notifyUser, NotificationType } from '@sbf/contracts';
+import { notifyUser, NotificationType, ListingStatus, OfferStatus, OrderPaymentStatus } from '@sbf/contracts';
 
 const router = Router();
 
@@ -34,7 +34,7 @@ router.post('/listings/:listingId/offers', requireAuth, async (req, res) => {
   try {
     const listing = await CardListing.findByPk(req.params.listingId);
     if (!listing) return res.status(404).json({ error: 'Listing not found' });
-    if (listing.status !== 'ACTIVE') return res.status(409).json({ error: 'Listing is not active' });
+    if (listing.status !== ListingStatus.ACTIVE) return res.status(409).json({ error: 'Listing is not active' });
     if (listing.sellerId === req.user.sub) return res.status(403).json({ error: 'Cannot offer on your own listing' });
     if (!listing.allowOffers) return res.status(409).json({ error: 'This listing does not accept offers' });
     if (listing.offerMinPrice && Number(amount) < Number(listing.offerMinPrice)) {
@@ -45,8 +45,8 @@ router.post('/listings/:listingId/offers', requireAuth, async (req, res) => {
 
     // Expire any previous pending offers from this buyer on the same listing
     await Offer.update(
-      { status: 'expired' },
-      { where: { listingId: listing.id, buyerId: req.user.sub, status: 'pending' } },
+      { status: OfferStatus.EXPIRED },
+      { where: { listingId: listing.id, buyerId: req.user.sub, status: OfferStatus.PENDING } },
     );
 
     const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000); // 48h
@@ -55,7 +55,7 @@ router.post('/listings/:listingId/offers', requireAuth, async (req, res) => {
       buyerId:   req.user.sub,
       amount,
       message:   message || null,
-      status:    'pending',
+      status:    OfferStatus.PENDING,
       expiresAt,
     });
 
@@ -124,16 +124,16 @@ router.post('/:id/respond', requireAuth, async (req, res) => {
     });
     if (!offer) return res.status(404).json({ error: 'Offer not found' });
     if (offer.CardListing.sellerId !== req.user.sub) return res.status(403).json({ error: 'Not your listing' });
-    if (offer.status !== 'pending') return res.status(409).json({ error: 'Offer is no longer pending' });
+    if (offer.status !== OfferStatus.PENDING) return res.status(409).json({ error: 'Offer is no longer pending' });
     if (offer.expiresAt && new Date(offer.expiresAt) < new Date()) {
-      await offer.update({ status: 'expired' });
+      await offer.update({ status: OfferStatus.EXPIRED });
       return res.status(410).json({ error: 'Offer has expired' });
     }
 
     const listing = offer.CardListing;
 
     if (action === 'decline') {
-      await offer.update({ status: 'declined', respondedAt: new Date() });
+      await offer.update({ status: OfferStatus.DECLINED, respondedAt: new Date() });
       await notifyUser({
         userId: offer.buyerId,
         type:   NotificationType.WARNING,
@@ -141,12 +141,12 @@ router.post('/:id/respond', requireAuth, async (req, res) => {
         body:   `Your offer on "${listing.title}" was declined.`,
         linkUrl: `/marketplace/${listing.id}`,
       }).catch(() => {});
-      return res.json({ ok: true, status: 'declined' });
+      return res.json({ ok: true, status: OfferStatus.DECLINED });
     }
 
     if (action === 'counter') {
       await offer.update({
-        status: 'countered', counterAmount, counterMessage: counterMessage || null, respondedAt: new Date(),
+        status: OfferStatus.COUNTERED, counterAmount, counterMessage: counterMessage || null, respondedAt: new Date(),
       });
       await notifyUser({
         userId: offer.buyerId,
@@ -155,7 +155,7 @@ router.post('/:id/respond', requireAuth, async (req, res) => {
         body:   `"${listing.title}" — seller countered at £${Number(counterAmount).toFixed(2)}`,
         linkUrl: `/marketplace/${listing.id}`,
       }).catch(() => {});
-      return res.json({ ok: true, status: 'countered', counterAmount });
+      return res.json({ ok: true, status: OfferStatus.COUNTERED, counterAmount });
     }
 
     // action === 'accept' → create order
@@ -197,14 +197,14 @@ router.post('/:id/respond', requireAuth, async (req, res) => {
       currency:    listing.currency || 'GBP',
       buyerAddressJson: resolvedAddress,
       sellerStripeAccountId: listing.sellerStripeAccountId,
-      paymentStatus: 'pending',
+      paymentStatus: OrderPaymentStatus.PENDING,
     });
 
-    await offer.update({ status: 'accepted', respondedAt: new Date() });
+    await offer.update({ status: OfferStatus.ACCEPTED, respondedAt: new Date() });
 
     // Mark listing sold
     if (listing.quantity <= 1) {
-      await listing.update({ status: 'SOLD', soldAt: new Date() });
+      await listing.update({ status: ListingStatus.SOLD, soldAt: new Date() });
     } else {
       await listing.decrement('quantity');
     }
@@ -248,10 +248,10 @@ router.delete('/:id', requireAuth, async (req, res) => {
     const offer = await Offer.findByPk(req.params.id);
     if (!offer) return res.status(404).json({ error: 'Offer not found' });
     if (offer.buyerId !== req.user.sub) return res.status(403).json({ error: 'Not your offer' });
-    if (!['pending', 'countered'].includes(offer.status)) {
+    if (![OfferStatus.PENDING, OfferStatus.COUNTERED].includes(offer.status)) {
       return res.status(409).json({ error: 'Offer cannot be withdrawn in its current state' });
     }
-    await offer.update({ status: 'withdrawn', respondedAt: new Date() });
+    await offer.update({ status: OfferStatus.WITHDRAWN, respondedAt: new Date() });
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });

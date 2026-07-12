@@ -4,7 +4,7 @@ import { createLogger } from '@sbf/logger';
 import { Order } from '../models/index.js';
 import { capturePaymentIntent, cancelPaymentIntent } from '../services/stripe.service.js';
 import { relistListing } from '../services/listing.service.js';
-import { notifyUser, NotificationType } from '@sbf/contracts';
+import { notifyUser, NotificationType, OrderPaymentStatus, OrderFulfilmentStatus } from '@sbf/contracts';
 
 const logger = createLogger('marketplace-service:internal');
 const router = Router();
@@ -41,8 +41,8 @@ router.post('/auto-capture', async (req, res) => {
   try {
     const orders = await Order.findAll({
       where: {
-        paymentStatus:    'authorised',
-        fulfilmentStatus: 'shipped',
+        paymentStatus:    OrderPaymentStatus.AUTHORISED,
+        fulfilmentStatus: OrderFulfilmentStatus.SHIPPED,
         shippedAt:        { [Op.lt]: cutoff },
         stripePaymentIntentId: { [Op.not]: null },
       },
@@ -54,8 +54,8 @@ router.post('/auto-capture', async (req, res) => {
       try {
         await capturePaymentIntent(order.stripePaymentIntentId);
         await order.update({
-          paymentStatus:    'captured',
-          fulfilmentStatus: 'completed',
+          paymentStatus:    OrderPaymentStatus.CAPTURED,
+          fulfilmentStatus: OrderFulfilmentStatus.COMPLETED,
           capturedAt:       new Date(),
           completedAt:      new Date(),
           adminNotes:       `Auto-captured after ${captureDays}-day delivery window`,
@@ -125,7 +125,7 @@ router.post('/auto-cancel-pending', async (req, res) => {
   try {
     const orders = await Order.findAll({
       where: {
-        paymentStatus: 'pending',
+        paymentStatus: OrderPaymentStatus.PENDING,
         createdAt:     { [Op.lt]: cutoff },
       },
     });
@@ -145,8 +145,8 @@ router.post('/auto-cancel-pending', async (req, res) => {
         }
 
         await order.update({
-          paymentStatus:    'cancelled',
-          fulfilmentStatus: 'cancelled',
+          paymentStatus:    OrderPaymentStatus.CANCELLED,
+          fulfilmentStatus: OrderFulfilmentStatus.CANCELLED,
           cancelledAt:      new Date(),
           cancelReason:     'Payment not completed — automatically cancelled',
         });

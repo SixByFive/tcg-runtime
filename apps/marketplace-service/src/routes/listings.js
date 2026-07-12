@@ -27,7 +27,10 @@ import {
 import { getRates } from '../services/shipping.service.js';
 import { createEscrowPaymentIntent } from '../services/stripe.service.js';
 import { calculateFeeForSeller } from '../services/fees.service.js';
-import { notifyUser, NotificationType, checkCapabilities } from '@sbf/contracts';
+import {
+  notifyUser, NotificationType, checkCapabilities,
+  ListingStatus, OfferStatus, OrderPaymentStatus, OrderFulfilmentStatus,
+} from '@sbf/contracts';
 
 const router = Router();
 
@@ -89,7 +92,7 @@ router.get('/', async (req, res) => {
   try {
     const page     = Math.max(1, Number(req.query.page) || 1);
     const pageSize = Math.min(100, Number(req.query.pageSize) || 50);
-    const where    = { status: 'ACTIVE' };
+    const where    = { status: ListingStatus.ACTIVE };
 
     if (req.query.cardId)    where.cardId    = req.query.cardId;
     if (req.query.condition) where.condition = req.query.condition;
@@ -116,7 +119,7 @@ router.get('/', async (req, res) => {
     const listingIds = rows.map((r) => r.id);
     const offerCounts = listingIds.length
       ? await Offer.findAll({
-          where: { listingId: { [Op.in]: listingIds }, status: { [Op.in]: ['pending', 'countered'] } },
+          where: { listingId: { [Op.in]: listingIds }, status: { [Op.in]: [OfferStatus.PENDING, OfferStatus.COUNTERED] } },
           attributes: ['listingId', [Offer.sequelize.fn('COUNT', Offer.sequelize.col('id')), 'cnt']],
           group: ['listingId'],
           raw: true,
@@ -181,7 +184,7 @@ router.post('/', requireAuth, async (req, res) => {
     const caps = await checkCapabilities(req.user.sub);
     if (caps.maxActiveListings !== null) {
       const activeCount = await CardListing.count({
-        where: { sellerId: req.user.sub, status: { [Op.in]: ['ACTIVE', 'PENDING_PROOF'] } },
+        where: { sellerId: req.user.sub, status: { [Op.in]: [ListingStatus.ACTIVE, ListingStatus.PENDING_PROOF] } },
       });
       if (activeCount >= caps.maxActiveListings) {
         return res.status(403).json({
@@ -206,7 +209,7 @@ router.post('/', requireAuth, async (req, res) => {
       cardId, title, description, condition, variant,
       price, currency: currency || 'GBP',
       quantity: quantity || 1,
-      status: 'PENDING_PROOF',
+      status: ListingStatus.PENDING_PROOF,
       proofCode,
       proofCodeExpiresAt: proofExpiry,
       shippingType:  shippingType || 'FIXED',
@@ -272,15 +275,15 @@ router.post('/:id/offers', requireAuth, async (req, res) => {
   try {
     const listing = await CardListing.findByPk(req.params.id);
     if (!listing) return res.status(404).json({ error: 'Listing not found' });
-    if (listing.status !== 'ACTIVE') return res.status(409).json({ error: 'Listing is not active' });
+    if (listing.status !== ListingStatus.ACTIVE) return res.status(409).json({ error: 'Listing is not active' });
     if (listing.sellerId === req.user.sub) return res.status(403).json({ error: 'Cannot offer on your own listing' });
     if (!listing.allowOffers) return res.status(409).json({ error: 'This listing does not accept offers' });
     if (listing.offerMinPrice && Number(amount) < Number(listing.offerMinPrice)) {
       return res.status(400).json({ error: `Minimum offer is £${listing.offerMinPrice}` });
     }
     await Offer.update(
-      { status: 'expired' },
-      { where: { listingId: listing.id, buyerId: req.user.sub, status: 'pending' } },
+      { status: OfferStatus.EXPIRED },
+      { where: { listingId: listing.id, buyerId: req.user.sub, status: OfferStatus.PENDING } },
     );
 
     // Snapshot the buyer's saved shipping address at offer time
@@ -299,7 +302,7 @@ router.post('/:id/offers', requireAuth, async (req, res) => {
       buyerId:   req.user.sub,
       amount,
       message:   message || null,
-      status:    'pending',
+      status:    OfferStatus.PENDING,
       expiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000),
       buyerAddressJson,
     });
@@ -324,7 +327,7 @@ router.get('/:id/proof-image', async (req, res) => {
     const listing = await CardListing.findByPk(req.params.id, {
       attributes: ['id', 'status', 'moderationResult', 'proofImagePath'],
     });
-    if (!listing || listing.status !== 'ACTIVE' || listing.moderationResult !== 'approved' || !listing.proofImagePath) {
+    if (!listing || listing.status !== ListingStatus.ACTIVE || listing.moderationResult !== 'approved' || !listing.proofImagePath) {
       return res.status(404).end();
     }
     const PROOF_DIR = process.env.PROOF_DIR || '/var/uploads/marketplace_proofs';
@@ -354,7 +357,7 @@ router.get('/:id', async (req, res) => {
     if (!listing) return res.status(404).json({ error: 'Listing not found' });
 
     // Only expose non-ACTIVE listings to the seller
-    if (listing.status !== 'ACTIVE') {
+    if (listing.status !== ListingStatus.ACTIVE) {
       // Parse JWT cookie without middleware (optional auth)
       let userId = null;
       try {
@@ -369,7 +372,7 @@ router.get('/:id', async (req, res) => {
 
     // Count active offers for the "Under Offer" indicator
     const pendingOfferCount = await Offer.count({
-      where: { listingId: listing.id, status: { [Op.in]: ['pending', 'countered'] } },
+      where: { listingId: listing.id, status: { [Op.in]: [OfferStatus.PENDING, OfferStatus.COUNTERED] } },
     });
 
     res.json({ ...listing.toJSON(), pendingOfferCount });
@@ -385,7 +388,7 @@ router.patch('/:id', requireAuth, async (req, res) => {
     const listing = await CardListing.findByPk(req.params.id);
     if (!listing) return res.status(404).json({ error: 'Listing not found' });
     if (listing.sellerId !== req.user.sub) return res.status(403).json({ error: 'Not your listing' });
-    if (['SOLD', 'CANCELLED', 'REMOVED'].includes(listing.status)) {
+    if ([ListingStatus.SOLD, ListingStatus.CANCELLED, ListingStatus.REMOVED].includes(listing.status)) {
       return res.status(409).json({ error: 'Listing cannot be edited in its current status' });
     }
 
@@ -413,10 +416,10 @@ router.delete('/:id', requireAuth, async (req, res) => {
     const listing = await CardListing.findByPk(req.params.id);
     if (!listing) return res.status(404).json({ error: 'Listing not found' });
     if (listing.sellerId !== req.user.sub) return res.status(403).json({ error: 'Not your listing' });
-    if (['SOLD', 'CANCELLED', 'REMOVED'].includes(listing.status)) {
+    if ([ListingStatus.SOLD, ListingStatus.CANCELLED, ListingStatus.REMOVED].includes(listing.status)) {
       return res.status(409).json({ error: 'Listing is already closed' });
     }
-    await listing.update({ status: 'CANCELLED' });
+    await listing.update({ status: ListingStatus.CANCELLED });
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -433,7 +436,7 @@ router.post('/:id/proof', requireAuth, async (req, res) => {
     const listing = await CardListing.findByPk(req.params.id);
     if (!listing) return res.status(404).json({ error: 'Listing not found' });
     if (listing.sellerId !== req.user.sub) return res.status(403).json({ error: 'Not your listing' });
-    if (!['PENDING_PROOF', 'DRAFT'].includes(listing.status)) {
+    if (![ListingStatus.PENDING_PROOF, ListingStatus.DRAFT].includes(listing.status)) {
       return res.status(409).json({ error: 'Listing is not awaiting proof' });
     }
 
@@ -484,7 +487,7 @@ router.post('/:id/proof', requireAuth, async (req, res) => {
         };
 
         if (result === 'approved') {
-          updates.status = 'ACTIVE';
+          updates.status = ListingStatus.ACTIVE;
 
           await OwnershipRecord.create({
             cardId:     listing.cardId,
@@ -552,7 +555,7 @@ router.post('/:id/shipping-rates', requireAuth, async (req, res) => {
   try {
     const listing = await CardListing.findByPk(req.params.id);
     if (!listing) return res.status(404).json({ error: 'Listing not found' });
-    if (listing.status !== 'ACTIVE') return res.status(409).json({ error: 'Listing is not active' });
+    if (listing.status !== ListingStatus.ACTIVE) return res.status(409).json({ error: 'Listing is not active' });
     if (listing.shippingType !== 'DYNAMIC') {
       return res.status(400).json({ error: 'This listing uses fixed shipping' });
     }
@@ -585,7 +588,7 @@ router.post('/:id/buy', requireAuth, async (req, res) => {
 
     const listing = await CardListing.findByPk(req.params.id);
     if (!listing) return res.status(404).json({ error: 'Listing not found' });
-    if (listing.status !== 'ACTIVE') return res.status(409).json({ error: 'Listing is not available' });
+    if (listing.status !== ListingStatus.ACTIVE) return res.status(409).json({ error: 'Listing is not available' });
     if (listing.sellerId === req.user.sub) return res.status(403).json({ error: 'Cannot buy your own listing' });
 
     // For dynamic shipping, a rateId is required at this point
@@ -657,12 +660,12 @@ router.post('/:id/buy', requireAuth, async (req, res) => {
         ...(labelQuotePence > 0 ? { labelQuotePence } : {}),
       } || null,
       walletAmountPence: walletPence,
-      paymentStatus: 'pending',
+      paymentStatus: OrderPaymentStatus.PENDING,
     });
 
     // Mark listing sold (reserve it while payment is pending)
     if (listing.quantity <= 1) {
-      await listing.update({ status: 'SOLD', soldAt: new Date() });
+      await listing.update({ status: ListingStatus.SOLD, soldAt: new Date() });
     } else {
       await listing.decrement('quantity');
     }
@@ -688,7 +691,7 @@ router.post('/:id/buy', requireAuth, async (req, res) => {
         const errData = await walletRes.json().catch(() => ({}));
         // Undo listing reservation
         if (listing.quantity <= 1) {
-          await listing.update({ status: 'ACTIVE', soldAt: null });
+          await listing.update({ status: ListingStatus.ACTIVE, soldAt: null });
         } else {
           await listing.increment('quantity');
         }
@@ -729,7 +732,7 @@ router.post('/:id/buy', requireAuth, async (req, res) => {
         }
         await order.destroy();
         if (listing.quantity <= 1) {
-          await listing.update({ status: 'ACTIVE', soldAt: null });
+          await listing.update({ status: ListingStatus.ACTIVE, soldAt: null });
         } else {
           await listing.increment('quantity');
         }
@@ -738,8 +741,8 @@ router.post('/:id/buy', requireAuth, async (req, res) => {
     } else if (cardPence === 0) {
       // Fully wallet-paid — mark as authorised and ready to ship immediately
       await order.update({
-        paymentStatus:    'authorised',
-        fulfilmentStatus: 'awaiting_shipment',
+        paymentStatus:    OrderPaymentStatus.AUTHORISED,
+        fulfilmentStatus: OrderFulfilmentStatus.AWAITING_SHIPMENT,
         authorisedAt:     new Date(),
       });
     }
@@ -777,7 +780,7 @@ router.post('/batch', requireAuth, async (req, res) => {
     const caps = await checkCapabilities(req.user.sub);
     if (caps.maxActiveListings !== null) {
       const activeCount = await CardListing.count({
-        where: { sellerId: req.user.sub, status: { [Op.in]: ['ACTIVE', 'PENDING_PROOF'] } },
+        where: { sellerId: req.user.sub, status: { [Op.in]: [ListingStatus.ACTIVE, ListingStatus.PENDING_PROOF] } },
       });
       const available = caps.maxActiveListings - activeCount;
       if (items.length > available) {
@@ -814,7 +817,7 @@ router.post('/batch', requireAuth, async (req, res) => {
           price:                 item.price         ?? null,
           currency:              item.currency      || 'GBP',
           quantity:              item.quantity      || 1,
-          status:                'PENDING_PROOF',
+          status:                ListingStatus.PENDING_PROOF,
           batchId,
           proofCode,
           proofCodeExpiresAt:    proofExpiry,
@@ -852,7 +855,7 @@ router.post('/batch/:batchId/proof', requireAuth, async (req, res) => {
       where: {
         batchId:  req.params.batchId,
         sellerId: req.user.sub,
-        status:   'PENDING_PROOF',
+        status:   ListingStatus.PENDING_PROOF,
       },
     });
     if (!listings.length) {
@@ -885,11 +888,11 @@ router.post('/batch/:batchId/proof', requireAuth, async (req, res) => {
       proofUploadedAt:  now,
       moderationResult: result,
       moderatedAt:      result !== 'pending_admin' ? now : null,
-      ...(result === 'approved' ? { status: 'ACTIVE' } : {}),
+      ...(result === 'approved' ? { status: ListingStatus.ACTIVE } : {}),
     };
 
     await CardListing.update(updates, {
-      where: { batchId: req.params.batchId, sellerId: req.user.sub, status: 'PENDING_PROOF' },
+      where: { batchId: req.params.batchId, sellerId: req.user.sub, status: ListingStatus.PENDING_PROOF },
     });
 
     if (result === 'approved') {

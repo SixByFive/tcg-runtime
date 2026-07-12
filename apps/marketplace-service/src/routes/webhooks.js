@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { Order, SellerProfile, CardListing } from '../models/index.js';
 import { constructWebhookEvent } from '../services/stripe.service.js';
-import { notifyUser, NotificationType } from '@sbf/contracts';
+import { notifyUser, NotificationType, OrderPaymentStatus } from '@sbf/contracts';
 import { getServiceUrl } from '@sbf/config';
 import { relistListing } from '../services/listing.service.js';
 import { createLogger } from '@sbf/logger';
@@ -34,7 +34,7 @@ router.post('/stripe', async (req, res) => {
         const order = await Order.findOne({ where: { stripePaymentIntentId: pi.id } });
         if (!order) break;
 
-        await order.update({ paymentStatus: 'authorised', authorisedAt: new Date() });
+        await order.update({ paymentStatus: OrderPaymentStatus.AUTHORISED, authorisedAt: new Date() });
 
         await notifyUser({
           userId: order.sellerId,
@@ -53,7 +53,7 @@ router.post('/stripe', async (req, res) => {
         const order  = await Order.findOne({ where: { stripePaymentIntentId: charge.payment_intent } });
         if (!order) break;
 
-        await order.update({ paymentStatus: 'captured', capturedAt: new Date() });
+        await order.update({ paymentStatus: OrderPaymentStatus.CAPTURED, capturedAt: new Date() });
 
         await notifyUser({
           userId:  order.buyerId,
@@ -81,7 +81,7 @@ router.post('/stripe', async (req, res) => {
         const order = await Order.findOne({ where: { stripePaymentIntentId: pi.id } });
         if (!order) break;
 
-        await order.update({ paymentStatus: 'cancelled' });
+        await order.update({ paymentStatus: OrderPaymentStatus.CANCELLED });
 
         // Refund any wallet contribution the buyer already paid
         if (order.walletAmountPence > 0) {
@@ -124,8 +124,8 @@ router.post('/stripe', async (req, res) => {
         const order = await Order.findOne({ where: { stripePaymentIntentId: pi.id } });
         if (!order) break;
 
-        if (order.paymentStatus !== 'cancelled') {
-          await order.update({ paymentStatus: 'cancelled' });
+        if (order.paymentStatus !== OrderPaymentStatus.CANCELLED) {
+          await order.update({ paymentStatus: OrderPaymentStatus.CANCELLED });
         }
 
         // Relist — PI was voided before any capture, card was never sold
@@ -142,8 +142,8 @@ router.post('/stripe', async (req, res) => {
         if (!order) break;
 
         // Only update if not already marked refunded (inline dispute resolution may have done it)
-        if (order.paymentStatus !== 'refunded') {
-          await order.update({ paymentStatus: 'refunded' });
+        if (order.paymentStatus !== OrderPaymentStatus.REFUNDED) {
+          await order.update({ paymentStatus: OrderPaymentStatus.REFUNDED });
         }
 
         await notifyUser({
