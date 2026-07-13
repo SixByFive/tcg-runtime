@@ -103,9 +103,9 @@ export const mutations = {
     }
   },
 
-  exportUserData: async (_, _args, { token, clients, logger }) => {
+  exportUserData: async (_, { password }, { token, clients, logger }) => {
     try {
-      const data = await clients.users.exportUserData(token);
+      const data = await clients.users.exportUserData(token, password);
       return typeof data === 'string' ? data : JSON.stringify(data);
     } catch (error) {
       logger.warn(`exportUserData failed: ${error.message}`);

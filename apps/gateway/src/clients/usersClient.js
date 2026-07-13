@@ -159,9 +159,11 @@ export async function deleteAccount(token, { password, confirm } = {}) {
 /**
  * GET /users/me/export — download own data export.
  */
-export async function exportUserData(token) {
+export async function exportUserData(token, password) {
   const data = await request('/users/me/export', {
-    headers: { Authorization: `Bearer ${token}` },
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password }),
   });
   return data;
 }

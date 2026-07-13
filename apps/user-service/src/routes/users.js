@@ -103,15 +103,23 @@ router.delete('/me', requireAuth, async (req, res) => {
   }
 });
 
-// ---- GET /users/me/export -------------------------------------------------
+// ---- POST /users/me/export ------------------------------------------------
 
-router.get('/me/export', requireAuth, async (req, res) => {
+router.post('/me/export', requireAuth, async (req, res) => {
   try {
+    const { password } = req.body;
+    if (!password) return res.status(400).json({ error: 'Password is required.' });
+
+    const userWithPw = await User.findByPk(req.user.sub);
+    if (!userWithPw) return res.status(404).json({ error: 'User not found' });
+
+    const valid = await bcrypt.compare(password, userWithPw.password);
+    if (!valid) return res.status(403).json({ error: 'Password incorrect.' });
+
     const user = await User.findByPk(req.user.sub, {
       attributes: { exclude: ['password'] },
       include: [{ model: Profile, as: 'profile' }],
     });
-    if (!user) return res.status(404).json({ error: 'User not found' });
 
     res.setHeader('Content-Disposition', `attachment; filename="export-${req.user.sub}.json"`);
     res.json({ exportedAt: new Date(), user });
