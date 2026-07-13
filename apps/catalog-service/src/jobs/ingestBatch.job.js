@@ -8,6 +8,7 @@
  *   dryRun   {boolean}   — passed through to ingestSet (default false)
  */
 import { ingestSet } from './ingestSet.job.js';
+import { collectPrices } from './collectPrices.job.js';
 import { createLogger } from '@sbf/logger';
 
 const logger = createLogger('catalog:ingest-batch');
@@ -30,6 +31,15 @@ export async function ingestBatch({ sets = [], refresh = false, pauseMs = 500, d
     } catch (err) {
       log.error(`ingestBatch: [${i + 1}/${sets.length}] ${setCode} failed — ${err.message}`);
       results.push({ code: setCode, ok: false, error: err.message });
+    }
+
+    if (!dryRun) {
+      try {
+        await collectPrices({ set: setCode, logger: log });
+        log.info(`ingestBatch: [${i + 1}/${sets.length}] ${setCode} prices collected`);
+      } catch (priceErr) {
+        log.warn(`ingestBatch: price collect for ${setCode} failed — ${priceErr.message}`);
+      }
     }
 
     if (pauseMs > 0 && i < sets.length - 1) {

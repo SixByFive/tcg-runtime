@@ -5,21 +5,22 @@ import { Set } from '../models/index.js';
 
 // Maps tcgdex code → our internal abbreviation.
 export const ALIASES = Object.freeze({
+  // Mega Evolution
   'me01': 'MEG',  'me02': 'PFL',   'me2.5': 'ASC',  'me03': 'POR',
   'me04': 'CRI',
-
+  // Scarlet and Violet
   'svp':  'SVP',  'sv01': 'SVI',   'sv02':  'PAL',   'sv03':  'OBF',
   'sv03.5': 'MEW','sv04': 'PAR',   'sv04.5':'PAF',   'sv05':  'TEF',
   'sv06': 'TWM',  'sv6.5':'SFA',   'sv07':  'SCR',   'sv08':  'SSP',
   'sv08.5':'PRE', 'sv09':'JTG',    'sv10':  'DRI',   'sv10.5b':'BLK',
   'sv10.5w':'WHT',
-
+  // Sword and Shield
   'swshp':'SWSH', 'swsh1':'SSH',   'swsh2': 'RCL',   'swsh3': 'DAA',
   'swsh3.5':'CPA','swsh4':'VIV',   'swsh4.5':'SHF',  'swsh5': 'BST',
   'swsh6':'CRE',  'swsh7':'EVS',   'swsh8': 'FST',   'swsh9': 'BRS',
   'swsh10':'ASR', 'swsh10.5':'PGO','swsh11':'LOR',   'swsh12':'SIT',
   'swsh12.5':'CRZ','cel25':'CEL',  'fut2020':'FUT',
-
+  // Sun and Moon
   'smp':  'SMP',  'sm1':  'SUM',   'sm2':   'GRI',   'sm3':   'BUS',
   'sm3.5':'SLG',  'sm4':  'CIN',   'sm5':   'UPR',   'sm6':   'FLI',
   'sm7':  'CES',  'sm7.5':'DRM',   'sm8':   'LOT',   'sm9':   'TEU',

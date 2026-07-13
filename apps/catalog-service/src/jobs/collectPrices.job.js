@@ -1,10 +1,6 @@
-// Collect latest prices for a set from one or more price providers.
-//
-// No price adapters are currently active. To add a provider:
-//   1. Create apps/catalog-service/src/adapters/<name>.adapter.js
-//      It must export: fetchPrices({ set, cardNumbers, variantsByNumber })
-//      returning: Array<{ card_id, variant, currency, amount, observed_at, source }>
-//   2. Import it below and add a branch in the fetch section.
+// Collect latest prices for a set from TCGDex.
+// Only runs for verified sets (Mega Evolutions, Scarlet & Violet, Sword & Shield).
+// Add a TCGDex code to PRICE_VERIFIED_SETS when a new era's data is confirmed accurate.
 
 import { Op } from 'sequelize';
 import { getSequelize } from '@sbf/database';
@@ -12,6 +8,22 @@ import { Card, CardVariant, PriceObservation } from '../models/index.js';
 import { resolveSet } from '../services/set.service.js';
 import { toGBP, getFx } from '../services/fx.service.js';
 import { fxDaily } from './fxDaily.job.js';
+import { fetchPrices } from '../adapters/tcgdexPrices.adapter.js';
+import { ALIASES } from '../seed/setAliases.js';
+
+// Verified eras — only these sets get prices fetched.
+// Derived from ALIASES so setAliases.js stays the single source of truth.
+const VERIFIED_ABBRS = new Set(['MEG', 'PFL', 'ASC', 'POR', 'CRI',  // Mega Evolutions
+  'SVP', 'SVI', 'PAL', 'OBF', 'MEW', 'PAR', 'PAF', 'TEF', 'TWM',
+  'SFA', 'SCR', 'SSP', 'PRE', 'JTG', 'DRI', 'BLK', 'WHT',           // Scarlet & Violet
+  'SWSH', 'SSH', 'RCL', 'DAA', 'CPA', 'VIV', 'SHF', 'BST', 'CRE',
+  'EVS', 'FST', 'BRS', 'ASR', 'PGO', 'LOR', 'SIT', 'CRZ', 'CEL', 'FUT'  // Sword & Shield
+]);
+const PRICE_VERIFIED_SETS = new Set(
+  Object.entries(ALIASES)
+    .filter(([, abbr]) => VERIFIED_ABBRS.has(abbr))
+    .map(([code]) => code),
+);
 
 export async function collectPrices({ set, since, dryRun = false, prewarmFx = false, backfillFxDays, logger = console } = {}) {
   const started = Date.now();
@@ -20,6 +32,18 @@ export async function collectPrices({ set, since, dryRun = false, prewarmFx = fa
   const setRow = await resolveSet(set);
   const tcgdexCode = setRow?.code;
   if (!tcgdexCode) throw new Error(`collectPrices: unable to resolve set '${set}'`);
+
+  if (!PRICE_VERIFIED_SETS.has(tcgdexCode)) {
+    logger.info?.(`collectPrices: skipping ${tcgdexCode} (not in verified set whitelist)`);
+    return { ok: true, setCode: tcgdexCode, skipped: true, counts: { cards: 0, variants: 0, observations: { collected: 0, written: 0 } }, ms: Date.now() - started };
+  }
+
+  const PRICES_LIVE_DATE = '2026-07-17';
+  const today = new Date().toISOString().slice(0, 10);
+  if (today < PRICES_LIVE_DATE) {
+    logger.info?.(`collectPrices: skipping ${tcgdexCode} (TCGDex pricing not accurate until ${PRICES_LIVE_DATE})`);
+    return { ok: true, setCode: tcgdexCode, skipped: true, counts: { cards: 0, variants: 0, observations: { collected: 0, written: 0 } }, ms: Date.now() - started };
+  }
 
   if (prewarmFx || backfillFxDays) {
     try {
@@ -62,8 +86,14 @@ export async function collectPrices({ set, since, dryRun = false, prewarmFx = fa
   const varByNumObj = Object.fromEntries(variantsByNumber);
 
   // ── Fetch from providers ────────────────────────────────────────────────────
-  // Add adapter imports + branches here as providers become available.
-  const rawObs = [];
+  const rawObs = await fetchPrices({
+    set: tcgdexCode,
+    cardNumbers: numbers,
+    variantsByNumber: varByNumObj,
+  }).catch(err => {
+    logger.warn?.(`tcgdex: price fetch failed for ${tcgdexCode}: ${err?.message}`);
+    return [];
+  });
 
   // ── Normalise + convert to GBP ─────────────────────────────────────────────
   const setPrefix = `${tcgdexCode}-`;
