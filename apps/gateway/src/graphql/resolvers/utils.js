@@ -1,3 +1,12 @@
+// Zero-pad the numeric portion of a set code: sv1-001 → sv01-001, swsh1-001 → swsh01-001
+function normalizeCatalogId(id) {
+  if (!id) return id;
+  return String(id).replace(
+    /^([a-z]+)(\d+)(-.+)$/i,
+    (_, era, num, rest) => `${era.toLowerCase()}${num.padStart(2, '0')}${rest}`,
+  );
+}
+
 /**
  * Enrich collection/wishlist entries with full card data from the catalog service
  * (variants, latestPrices, images, set). Handles both array and WishlistPage shapes.
@@ -24,7 +33,7 @@ export async function hydrateCards(entriesOrPage, catalogClient, logger) {
 
   if (!entries.length) return entriesOrPage;
 
-  const ids = [...new Set(entries.map(e => e.cardId).filter(Boolean))];
+  const ids = [...new Set(entries.map(e => normalizeCatalogId(e.cardId)).filter(Boolean))];
   if (!ids.length) return entriesOrPage;
 
   let catalogCards = [];
@@ -35,10 +44,10 @@ export async function hydrateCards(entriesOrPage, catalogClient, logger) {
     return entriesOrPage;
   }
 
-  const cardMap = new Map(catalogCards.map(c => [c.id || c.cardId, c]));
+  const cardMap = new Map(catalogCards.map(c => [normalizeCatalogId(c.id || c.cardId), c]));
   const hydrated = entries.map(entry => ({
     ...entry,
-    card: cardMap.get(entry.cardId) || entry.card || null,
+    card: cardMap.get(normalizeCatalogId(entry.cardId)) || entry.card || null,
   }));
 
   if (isPage)   return { ...entriesOrPage, entries: hydrated };

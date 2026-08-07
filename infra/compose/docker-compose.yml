@@ -165,8 +165,11 @@ services:
       ADMIN_API_KEY: ${ADMIN_API_KEY:-change_me_admin_key}
       NODE_ENV: production
       NODE_OPTIONS: --max-old-space-size=256
+      FX_CACHE_DIR: /data/fx-cache
     ports:
       - "4012:4012"
+    volumes:
+      - fx_cache:/data/fx-cache
     mem_limit: 320m
     mem_reservation: 160m
     healthcheck:
@@ -555,3 +558,4 @@ volumes:
   redis_data:
   media_uploads:
   mail_mgmt_data:
+  fx_cache:
