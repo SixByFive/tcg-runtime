@@ -147,11 +147,17 @@ export async function rebuildRollupsAll(opts = {}) {
   const asOf = opts.asOf || todayISO();
   const windows = normalizeWindows(opts.windows);
 
-  const pairs = await PriceObservation.findAll({
+  // Filter to card_ids that exist in m_cards — orphaned observations (whose card
+  // was deleted or re-keyed) would cause a FK constraint failure on upsert.
+  const validCards = await Card.findAll({ attributes: ['id'], raw: true });
+  const validIds = new Set(validCards.map(c => c.id));
+
+  const allPairs = await PriceObservation.findAll({
     attributes: [['card_id', 'card_id'], ['variant', 'variant']],
     group: ['card_id', 'variant'],
     raw: true,
   });
+  const pairs = allPairs.filter(p => validIds.has(p.card_id));
 
   const results = [];
   for (const { card_id, variant } of pairs) {
@@ -160,5 +166,5 @@ export async function rebuildRollupsAll(opts = {}) {
     results.push({ card_id, variant, rows });
   }
 
-  return { ok: true, pairs: pairs.length, windows, results };
+  return { ok: true, pairs: pairs.length, orphaned: allPairs.length - pairs.length, windows, results };
 }

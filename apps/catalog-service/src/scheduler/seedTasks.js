@@ -18,6 +18,7 @@ const TZ = 'Europe/London';
 // HOT — daily ingest, 6-hourly per-set rollup
 // ---------------------------------------------------------------------------
 const HOT_BATCHES = [
+  { time: '45 23', sets: ['me05']               },
   { time: '15 0',  sets: ['me04',    'me03']    },
   { time: '45 0',  sets: ['me02.5',  'me02']    },
   { time: '15 1',  sets: ['me01',    'mep']     },

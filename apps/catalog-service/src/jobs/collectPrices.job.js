@@ -13,7 +13,7 @@ import { ALIASES } from '../seed/setAliases.js';
 
 // Verified eras — only these sets get prices fetched.
 // Derived from ALIASES so setAliases.js stays the single source of truth.
-const VERIFIED_ABBRS = new Set(['MEG', 'PFL', 'ASC', 'POR', 'CRI',  // Mega Evolutions
+const VERIFIED_ABBRS = new Set(['MEG', 'PFL', 'ASC', 'POR', 'CRI', 'PBK',  // Mega Evolutions
   'SVP', 'SVI', 'PAL', 'OBF', 'MEW', 'PAR', 'PAF', 'TEF', 'TWM',
   'SFA', 'SCR', 'SSP', 'PRE', 'JTG', 'DRI', 'BLK', 'WHT',           // Scarlet & Violet
   'SWSH', 'SSH', 'RCL', 'DAA', 'CPA', 'VIV', 'SHF', 'BST', 'CRE',
