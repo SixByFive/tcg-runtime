@@ -51,7 +51,7 @@ const ACTIVE_BATCHES = [
 ];
 
 // ---------------------------------------------------------------------------
-// LEGACY — seeded disabled; enable individually as needed
+// LEGACY — SM / XY / BW / DP eras: every 3 days
 // ---------------------------------------------------------------------------
 const LEGACY_BATCHES = [
   { time: '15 11', sets: ['sm12',  'sm115'] },
@@ -87,17 +87,19 @@ const LEGACY_BATCHES = [
 // ---------------------------------------------------------------------------
 // Build task list
 // ---------------------------------------------------------------------------
-function batchTasks(batches, enabled) {
+function batchTasks(batches, enabled, every = 1) {
+  const dayCron = every === 1 ? '* * *' : `*/3 * *`;
+  const freqLabel = every === 1 ? 'Daily' : 'Every-3d';
   return batches.map(({ time, sets }) => {
     const id = `ingest-batch:${sets.join('+')}`;
     const label = sets.join('+');
     return {
       id,
       name: 'ingestBatch',
-      cronExp: `${time} * * *`,
+      cronExp: `${time} ${dayCron}`,
       payload: { sets, refresh: false, pauseMs: 500 },
       timezone: TZ,
-      description: `Daily ingest for ${label}`,
+      description: `${freqLabel} ingest for ${label}`,
       enabled,
     };
   });
@@ -118,7 +120,7 @@ function rollupTasks(sets) {
 export const STANDARD_TASKS = [
   ...batchTasks(HOT_BATCHES,    true),
   ...batchTasks(ACTIVE_BATCHES, true),
-  ...batchTasks(LEGACY_BATCHES, false),
+  ...batchTasks(LEGACY_BATCHES, true, 3),
   ...rollupTasks(HOT_SETS),
 ];
 
