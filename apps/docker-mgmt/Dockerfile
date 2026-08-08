@@ -6,7 +6,7 @@ COPY package.json pnpm-workspace.yaml ./
 COPY apps/docker-mgmt ./apps/docker-mgmt
 COPY packages ./packages
 
-RUN npm install -g pnpm && pnpm install --no-frozen-lockfile
+RUN npm install -g pnpm@9 && pnpm install --no-frozen-lockfile
 
 EXPOSE 4030
 

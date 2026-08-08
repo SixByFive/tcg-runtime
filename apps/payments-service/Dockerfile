@@ -11,7 +11,7 @@ COPY packages/logger    ./packages/logger
 COPY apps/payments-service ./apps/payments-service
 COPY env ./env
 
-RUN npm install -g pnpm && pnpm install --no-frozen-lockfile --filter @sbf/payments-service...
+RUN npm install -g pnpm@9 && pnpm install --no-frozen-lockfile --filter @sbf/payments-service...
 
 WORKDIR /app/apps/payments-service
 

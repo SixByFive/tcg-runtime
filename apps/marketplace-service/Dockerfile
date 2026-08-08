@@ -11,7 +11,7 @@ COPY packages/logger    ./packages/logger
 COPY apps/marketplace-service ./apps/marketplace-service
 COPY env ./env
 
-RUN npm install -g pnpm && pnpm install --no-frozen-lockfile --filter @sbf/marketplace-service...
+RUN npm install -g pnpm@9 && pnpm install --no-frozen-lockfile --filter @sbf/marketplace-service...
 
 WORKDIR /app/apps/marketplace-service
 

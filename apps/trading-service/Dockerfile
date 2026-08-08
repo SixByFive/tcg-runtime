@@ -7,7 +7,7 @@ COPY apps/trading-service ./apps/trading-service
 COPY packages ./packages
 COPY env ./env
 
-RUN npm install -g pnpm && pnpm install --no-frozen-lockfile
+RUN npm install -g pnpm@9 && pnpm install --no-frozen-lockfile
 
 VOLUME ["/var/uploads"]
 

@@ -7,7 +7,7 @@ COPY apps/catalog-service ./apps/catalog-service
 COPY packages ./packages
 COPY env ./env
 
-RUN npm install -g pnpm && pnpm install --no-frozen-lockfile
+RUN npm install -g pnpm@9 && pnpm install --no-frozen-lockfile
 
 EXPOSE 4012
 
