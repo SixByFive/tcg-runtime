@@ -10,6 +10,7 @@ import { runOfferExpiryJob }     from './jobs/offer-expiry.job.js';
 import { runPriceAlertsJob }     from './jobs/price-alerts.job.js';
 import { runTradeTopUpExpiryJob } from './jobs/trade-topup-expiry.job.js';
 import { runUnreadReminderJob }   from './jobs/unread-reminder.job.js';
+import { runTrackingRefreshJob }  from './jobs/tracking-refresh.job.js';
 
 const serviceName = 'worker-service';
 const logger      = createLogger(serviceName);
@@ -59,6 +60,9 @@ function startJobs() {
 
   // Unread message email reminders — every 15 minutes
   schedule('unread-reminder', '*/15 * * * *', runUnreadReminderJob);
+
+  // Shipping tracking refresh — every 2 hours
+  schedule('tracking-refresh', '0 */2 * * *', runTrackingRefreshJob);
 }
 
 // ─── Boot ─────────────────────────────────────────────────────────────────────

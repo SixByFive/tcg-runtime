@@ -89,6 +89,7 @@ router.post('/run-job', async (req, res) => {
     'offer-expiry':       () => import('../jobs/offer-expiry.job.js').then((m) => m.runOfferExpiryJob()),
     'price-alerts':       () => import('../jobs/price-alerts.job.js').then((m) => m.runPriceAlertsJob()),
     'trade-topup-expiry': () => import('../jobs/trade-topup-expiry.job.js').then((m) => m.runTradeTopUpExpiryJob()),
+    'tracking-refresh':   () => import('../jobs/tracking-refresh.job.js').then((m) => m.runTrackingRefreshJob()),
   };
 
   if (!jobs[job]) {
