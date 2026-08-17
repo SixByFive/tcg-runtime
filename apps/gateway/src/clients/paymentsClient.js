@@ -41,14 +41,14 @@ export async function getPlans() {
 }
 
 export async function adminGetPlans(token) {
-  const data = await request('/payments/admin/plans', {
+  const data = await request('/payments/plans/admin', {
     headers: authHeaders(token),
   });
   return data?.plans ?? data ?? [];
 }
 
 export async function adminCreatePlan(token, input) {
-  return request('/payments/admin/plans', {
+  return request('/payments/plans/admin', {
     method: 'POST',
     headers: authHeaders(token),
     body: JSON.stringify(input),
@@ -56,7 +56,7 @@ export async function adminCreatePlan(token, input) {
 }
 
 export async function adminUpdatePlan(token, id, input) {
-  return request(`/payments/admin/plans/${encodeURIComponent(id)}`, {
+  return request(`/payments/plans/admin/${encodeURIComponent(id)}`, {
     method: 'PATCH',
     headers: authHeaders(token),
     body: JSON.stringify(input),
