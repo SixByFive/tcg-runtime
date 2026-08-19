@@ -13,10 +13,6 @@ function clean(value) {
   return trimmed.slice(0, MAX_ATTRIBUTION_LENGTH);
 }
 
-function nullableMatch(field, value) {
-  return value == null ? { [field]: { [Op.is]: null } } : { [field]: value };
-}
-
 // Records first-touch campaign attribution for an already authenticated user.
 // Existing values are never overwritten: the first campaign that acquired the
 // registration remains the source of truth even if the user later revisits via
@@ -50,6 +46,12 @@ router.post('/', requireAuth, async (req, res) => {
 // An "activated" registration is an attributed user who has at least one real
 // collection card (wishlist=false) in the shared platform database.
 router.get('/admin', requireAdmin, async (_req, res) => {
+  // activatedUsers is computed inline with a conditional COUNT so the whole
+  // response is a single GROUP BY query rather than N+1 per campaign row.
+  // Same MySQL database is shared by auth and collections services — see User.js.
+  const ACTIVATED_SUBQUERY =
+    '(SELECT DISTINCT `userId` FROM `collections` WHERE (`wishlist` = 0 OR `wishlist` IS NULL))';
+
   const rows = await User.findAll({
     attributes: [
       'utmSource',
@@ -57,6 +59,7 @@ router.get('/admin', requireAdmin, async (_req, res) => {
       'utmCampaign',
       'utmContent',
       [fn('COUNT', col('id')), 'registrations'],
+      [literal(`COUNT(CASE WHEN \`id\` IN ${ACTIVATED_SUBQUERY} THEN 1 END)`), 'activatedUsers'],
       [fn('MIN', col('createdAt')), 'firstRegistrationAt'],
       [fn('MAX', col('createdAt')), 'lastRegistrationAt'],
     ],
@@ -71,35 +74,21 @@ router.get('/admin', requireAdmin, async (_req, res) => {
     raw: true,
   });
 
-  const campaigns = await Promise.all(rows.map(async (row) => {
+  const campaigns = rows.map((row) => {
     const registrations = Number(row.registrations ?? 0);
-    const activatedUsers = await User.count({
-      where: {
-        [Op.and]: [
-          nullableMatch('utmSource', row.utmSource),
-          nullableMatch('utmMedium', row.utmMedium),
-          nullableMatch('utmCampaign', row.utmCampaign),
-          nullableMatch('utmContent', row.utmContent),
-          // Same MySQL database is shared by auth and collections services. This
-          // keeps the result aggregate-only and avoids sending attributed user IDs
-          // through the admin app just to calculate activation.
-          { id: { [Op.in]: literal('(SELECT DISTINCT `userId` FROM `collections` WHERE (`wishlist` = 0 OR `wishlist` IS NULL))') } },
-        ],
-      },
-    });
-
+    const activatedUsers = Number(row.activatedUsers ?? 0);
     return {
       source: row.utmSource ?? null,
       medium: row.utmMedium ?? null,
       campaign: row.utmCampaign ?? null,
       campaignId: row.utmContent ?? null,
       registrations,
-      activatedUsers: Number(activatedUsers ?? 0),
+      activatedUsers,
       activationRate: registrations > 0 ? Number(((activatedUsers / registrations) * 100).toFixed(2)) : 0,
       firstRegistrationAt: row.firstRegistrationAt ? new Date(row.firstRegistrationAt).toISOString() : null,
       lastRegistrationAt: row.lastRegistrationAt ? new Date(row.lastRegistrationAt).toISOString() : null,
     };
-  }));
+  });
 
   campaigns.sort((a, b) => b.registrations - a.registrations);
 
