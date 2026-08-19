@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { Op, fn, col } from 'sequelize';
 import { User } from '../models/index.js';
-import { requireAuth } from '../middleware/requireAuth.js';
+import { requireAuth, requireAdmin } from '../middleware/requireAuth.js';
 
 const router = Router();
 const MAX_ATTRIBUTION_LENGTH = 128;
@@ -43,10 +43,7 @@ router.post('/', requireAuth, async (req, res) => {
 });
 
 // Aggregate-only admin view. No email, username or user id leaves auth-service.
-router.get('/admin', requireAuth, async (req, res) => {
-  const admin = await User.findByPk(req.user.sub, { attributes: ['id', 'isAdmin'] });
-  if (!admin?.isAdmin) return res.status(403).json({ error: 'Admin access required' });
-
+router.get('/admin', requireAdmin, async (_req, res) => {
   const rows = await User.findAll({
     attributes: [
       'utmSource',
