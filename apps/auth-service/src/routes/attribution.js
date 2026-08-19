@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { Op, fn, col } from 'sequelize';
+import { Op, fn, col, literal } from 'sequelize';
 import { User } from '../models/index.js';
 import { requireAuth, requireAdmin } from '../middleware/requireAuth.js';
 
@@ -11,6 +11,10 @@ function clean(value) {
   const trimmed = value.trim();
   if (!trimmed) return null;
   return trimmed.slice(0, MAX_ATTRIBUTION_LENGTH);
+}
+
+function nullableMatch(field, value) {
+  return value == null ? { [field]: { [Op.is]: null } } : { [field]: value };
 }
 
 // Records first-touch campaign attribution for an already authenticated user.
@@ -43,6 +47,8 @@ router.post('/', requireAuth, async (req, res) => {
 });
 
 // Aggregate-only admin view. No email, username or user id leaves auth-service.
+// An "activated" registration is an attributed user who has at least one real
+// collection card (wishlist=false) in the shared platform database.
 router.get('/admin', requireAdmin, async (_req, res) => {
   const rows = await User.findAll({
     attributes: [
@@ -65,20 +71,41 @@ router.get('/admin', requireAdmin, async (_req, res) => {
     raw: true,
   });
 
-  const campaigns = rows
-    .map((row) => ({
+  const campaigns = await Promise.all(rows.map(async (row) => {
+    const registrations = Number(row.registrations ?? 0);
+    const activatedUsers = await User.count({
+      where: {
+        [Op.and]: [
+          nullableMatch('utmSource', row.utmSource),
+          nullableMatch('utmMedium', row.utmMedium),
+          nullableMatch('utmCampaign', row.utmCampaign),
+          nullableMatch('utmContent', row.utmContent),
+          // Same MySQL database is shared by auth and collections services. This
+          // keeps the result aggregate-only and avoids sending attributed user IDs
+          // through the admin app just to calculate activation.
+          { id: { [Op.in]: literal('(SELECT DISTINCT `userId` FROM `collections` WHERE (`wishlist` = 0 OR `wishlist` IS NULL))') } },
+        ],
+      },
+    });
+
+    return {
       source: row.utmSource ?? null,
       medium: row.utmMedium ?? null,
       campaign: row.utmCampaign ?? null,
       campaignId: row.utmContent ?? null,
-      registrations: Number(row.registrations ?? 0),
+      registrations,
+      activatedUsers: Number(activatedUsers ?? 0),
+      activationRate: registrations > 0 ? Number(((activatedUsers / registrations) * 100).toFixed(2)) : 0,
       firstRegistrationAt: row.firstRegistrationAt ? new Date(row.firstRegistrationAt).toISOString() : null,
       lastRegistrationAt: row.lastRegistrationAt ? new Date(row.lastRegistrationAt).toISOString() : null,
-    }))
-    .sort((a, b) => b.registrations - a.registrations);
+    };
+  }));
+
+  campaigns.sort((a, b) => b.registrations - a.registrations);
 
   return res.json({
     totalAttributedRegistrations: campaigns.reduce((sum, item) => sum + item.registrations, 0),
+    totalActivatedUsers: campaigns.reduce((sum, item) => sum + item.activatedUsers, 0),
     campaigns,
   });
 });
