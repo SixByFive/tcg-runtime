@@ -17,6 +17,15 @@ export const queries = {
     }
   },
 
+  adminMarketingAttribution: async (_, __, { token, clients, logger }) => {
+    try {
+      return await clients.auth.adminGetMarketingAttribution(token);
+    } catch (error) {
+      logger.warn(`adminMarketingAttribution failed: ${error.message}`);
+      return { totalAttributedRegistrations: 0, campaigns: [] };
+    }
+  },
+
   adminBinders: async (_, args, { token, clients, logger }) => {
     try {
       return await clients.collections.adminGetBinders(token, args);
