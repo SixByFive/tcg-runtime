@@ -12,11 +12,7 @@ function getAuthServiceBaseUrl() {
 async function parseJson(response) {
   const text = await response.text();
   if (!text) return null;
-  try {
-    return JSON.parse(text);
-  } catch {
-    return { raw: text };
-  }
+  try { return JSON.parse(text); } catch { return { raw: text }; }
 }
 
 async function request(path, options = {}) {
@@ -34,25 +30,18 @@ async function request(path, options = {}) {
   const data = await parseJson(response);
 
   if (!response.ok) {
-    const message =
-      data?.error ||
-      data?.message ||
-      `Auth service request failed: ${response.status}`;
+    const message = data?.error || data?.message || `Auth service request failed: ${response.status}`;
     throw new Error(message);
   }
 
   return data;
 }
 
-/**
- * Normalise auth-service user shape → gateway User type.
- * auth-service uses twoFactorEnabled; schema exposes both twoFactorEnabled + mfaEnabled.
- */
+/** Normalise auth-service user shape → gateway User type. */
 function normaliseUser(user) {
   if (!user) return null;
   return {
     ...user,
-    // Alias — some frontend code uses mfaEnabled, some twoFactorEnabled
     mfaEnabled: user.mfaEnabled ?? user.twoFactorEnabled ?? false,
     avatar: user.avatar ?? null,
     oauthProvider: user.oauthProvider ?? null,
@@ -62,9 +51,6 @@ function normaliseUser(user) {
   };
 }
 
-/**
- * GET /auth/me — returns { user } or throws if unauthenticated.
- */
 export async function getMe(token) {
   const data = await request('/auth/me', {
     method: 'GET',
@@ -73,52 +59,43 @@ export async function getMe(token) {
   return { user: normaliseUser(data?.user ?? data) };
 }
 
-/**
- * POST /auth/login → { token, user }
- * Maps auth-service's accessToken → token for the GraphQL schema.
- */
 export async function login(input) {
   const data = await request('/auth/login', {
     method: 'POST',
     body: JSON.stringify({
-      email:    input.email,
+      email: input.email,
       username: input.username,
       password: input.password,
     }),
   });
 
   return {
-    token:        data?.accessToken  ?? null,
+    token: data?.accessToken ?? null,
     refreshToken: data?.refreshToken ?? null,
-    user:         normaliseUser(data?.user),
+    user: normaliseUser(data?.user),
   };
 }
 
-/**
- * POST /auth/register → { token, refreshToken, user }
- */
 export async function register(input) {
   const data = await request('/auth/register', {
     method: 'POST',
     body: JSON.stringify({
       username: input.username,
-      email:    input.email,
+      email: input.email,
       password: input.password,
+      referrerId: input.referrerId,
     }),
   });
 
   return {
-    token:        data?.accessToken  ?? null,
+    token: data?.accessToken ?? null,
     refreshToken: data?.refreshToken ?? null,
-    user:         normaliseUser(data?.user),
+    user: normaliseUser(data?.user),
   };
 }
 
 // ─── Password reset ───────────────────────────────────────────────────────────
 
-/**
- * POST /auth/password/forgot — sends a reset email; always returns true.
- */
 export async function requestPasswordReset(email) {
   await request('/auth/password/forgot', {
     method: 'POST',
@@ -127,9 +104,6 @@ export async function requestPasswordReset(email) {
   return true;
 }
 
-/**
- * POST /auth/password/reset — consumes a reset token and sets a new password.
- */
 export async function resetPassword(token, newPassword) {
   const data = await request('/auth/password/reset', {
     method: 'POST',
@@ -138,10 +112,6 @@ export async function resetPassword(token, newPassword) {
   return data?.success ?? true;
 }
 
-/**
- * PUT /auth/password — change password while authenticated.
- * Returns true; the service also re-issues tokens but the GraphQL layer ignores them.
- */
 export async function changePassword(token, currentPassword, newPassword) {
   await request('/auth/password', {
     method: 'PUT',
@@ -151,9 +121,6 @@ export async function changePassword(token, currentPassword, newPassword) {
   return true;
 }
 
-/**
- * PUT /auth/email — change email while authenticated; triggers re-verification.
- */
 export async function changeEmail(token, newEmail, currentPassword) {
   await request('/auth/email', {
     method: 'PUT',
@@ -165,9 +132,6 @@ export async function changeEmail(token, newEmail, currentPassword) {
 
 // ─── Two-factor auth ──────────────────────────────────────────────────────────
 
-/**
- * POST /auth/2fa/setup → { otpauthUrl, qrCodeDataURL }
- */
 export async function enableTwoFactor(token) {
   return request('/auth/2fa/setup', {
     method: 'POST',
@@ -176,9 +140,6 @@ export async function enableTwoFactor(token) {
   });
 }
 
-/**
- * POST /auth/2fa/verify — confirms setup and enables 2FA.
- */
 export async function verifyTwoFactor(token, code) {
   const data = await request('/auth/2fa/verify', {
     method: 'POST',
@@ -188,9 +149,6 @@ export async function verifyTwoFactor(token, code) {
   return data?.success ?? true;
 }
 
-/**
- * DELETE /auth/2fa — disables 2FA; requires current TOTP code.
- */
 export async function disableTwoFactor(token, code) {
   const data = await request('/auth/2fa', {
     method: 'DELETE',
@@ -198,4 +156,13 @@ export async function disableTwoFactor(token, code) {
     body: JSON.stringify({ token: code }),
   });
   return data?.success ?? true;
+}
+
+// ─── Marketing attribution admin ──────────────────────────────────────────────
+
+export async function adminGetMarketingAttribution(token) {
+  return request('/auth/attribution/admin', {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${token}` },
+  });
 }
