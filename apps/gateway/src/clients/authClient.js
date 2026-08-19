@@ -163,7 +163,7 @@ export async function changeEmail(token, newEmail, currentPassword) {
   return true;
 }
 
-// ─── Two-factor auth ──────────────────────────────────────────────────────────
+// ─── Two-factor auth ───────────────────────────────────────────────────────────
 
 /**
  * POST /auth/2fa/setup → { otpauthUrl, qrCodeDataURL }

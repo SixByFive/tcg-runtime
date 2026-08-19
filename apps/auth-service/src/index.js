@@ -6,6 +6,7 @@ import { getServicePort } from '@sbf/config';
 import { createLogger } from '@sbf/logger';
 import { initModels } from './models/index.js';
 import authRouter from './routes/auth.js';
+import attributionRouter from './routes/attribution.js';
 import discordRouter from './routes/discord.js';
 
 const serviceName = 'auth-service';
@@ -42,6 +43,7 @@ app.use((req, res, next) => {
 app.get('/health', (_req, res) => res.json({ status: 'ok', service: serviceName }));
 
 app.use('/auth', authRouter);
+app.use('/auth/attribution', attributionRouter);
 app.use('/auth/discord', discordRouter);
 
 // Central error handler

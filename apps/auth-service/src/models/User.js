@@ -88,6 +88,24 @@ export default function defineUser(sequelize) {
         type: DataTypes.UUID,
         allowNull: true,
       },
+      // First-touch marketing attribution captured when the account is created.
+      // These deliberately contain only campaign metadata, never a raw landing URL.
+      utmSource: {
+        type: DataTypes.STRING(128),
+        allowNull: true,
+      },
+      utmMedium: {
+        type: DataTypes.STRING(128),
+        allowNull: true,
+      },
+      utmCampaign: {
+        type: DataTypes.STRING(128),
+        allowNull: true,
+      },
+      utmContent: {
+        type: DataTypes.STRING(128),
+        allowNull: true,
+      },
       // Age / parental-control fields
       dob: {
         type: DataTypes.DATEONLY,
