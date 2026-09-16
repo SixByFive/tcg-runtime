@@ -10,6 +10,18 @@ function normalizeVariation(v) {
   return !v || String(v).trim() === '' ? null : String(v).trim();
 }
 
+// Build a Sequelize WHERE condition for variation that treats null and "normal"
+// as equivalent. Cards added before "normal" became an explicit stored value
+// have variation=null in the DB; newer cards have variation="normal". Both mean
+// the same thing semantically, so lookups must accept either.
+function variationWhere(v) {
+  const norm = normalizeVariation(v);
+  if (norm === null || norm.toLowerCase() === 'normal') {
+    return { [Op.or]: [null, 'normal'] };
+  }
+  return norm;
+}
+
 // GET /collection — my collection (no wishlist items)
 router.get('/', requireAuth, async (req, res) => {
   try {
@@ -242,7 +254,7 @@ router.patch('/', requireAuth, async (req, res) => {
       where: {
         userId: req.user.sub,
         cardId,
-        variation: normalizeVariation(variation),
+        variation: variationWhere(variation),
         wishlist: false,
       },
       transaction: t,
@@ -276,7 +288,7 @@ router.delete('/', requireAuth, async (req, res) => {
       where: {
         userId: req.user.sub,
         cardId,
-        variation: normalizeVariation(variation),
+        variation: variationWhere(variation),
         wishlist: false,
       },
     });
@@ -301,7 +313,7 @@ router.post('/move-to-wishlist', requireAuth, async (req, res) => {
       where: {
         userId: req.user.sub,
         cardId,
-        variation: normalizeVariation(variation),
+        variation: variationWhere(variation),
         wishlist: false,
       },
       transaction: t,
