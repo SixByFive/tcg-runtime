@@ -1,4 +1,4 @@
-// Collect latest prices for a set from TCGDex.
+﻿// Collect latest prices for a set from TCGDex.
 // Only runs for verified sets (Mega Evolutions, Scarlet & Violet, Sword & Shield).
 // Add a TCGDex code to PRICE_VERIFIED_SETS when a new era's data is confirmed accurate.
 
@@ -11,9 +11,9 @@ import { fxDaily } from './fxDaily.job.js';
 import { fetchPrices } from '../adapters/tcgdexPrices.adapter.js';
 import { ALIASES } from '../seed/setAliases.js';
 
-// Verified eras — only these sets get prices fetched.
+// Verified eras â€” only these sets get prices fetched.
 // Derived from ALIASES so setAliases.js stays the single source of truth.
-const VERIFIED_ABBRS = new Set(['MEG', 'PFL', 'ASC', 'POR', 'CRI', 'PBK',  // Mega Evolutions
+const VERIFIED_ABBRS = new Set(['MEG', 'PFL', 'ASC', 'POR', 'CRI', 'PBK', '30C',  // Mega Evolutions
   'SVP', 'SVI', 'PAL', 'OBF', 'MEW', 'PAR', 'PAF', 'TEF', 'TWM',
   'SFA', 'SCR', 'SSP', 'PRE', 'JTG', 'DRI', 'BLK', 'WHT',           // Scarlet & Violet
   'SWSH', 'SSH', 'RCL', 'DAA', 'CPA', 'VIV', 'SHF', 'BST', 'CRE',
@@ -80,12 +80,12 @@ export async function collectPrices({ set, since, dryRun = false, prewarmFx = fa
     const num = parts.slice(1).join('-');
     if (!num) continue;
     const list = variantsByNumber.get(num) || [];
-    list.push(r.variant); // already canonical — stored by ingestSet with full compound key
+    list.push(r.variant); // already canonical â€” stored by ingestSet with full compound key
     variantsByNumber.set(num, list);
   }
   const varByNumObj = Object.fromEntries(variantsByNumber);
 
-  // ── Fetch from providers ────────────────────────────────────────────────────
+  // â”€â”€ Fetch from providers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const rawObs = await fetchPrices({
     set: tcgdexCode,
     cardNumbers: numbers,
@@ -95,7 +95,7 @@ export async function collectPrices({ set, since, dryRun = false, prewarmFx = fa
     return [];
   });
 
-  // ── Normalise + convert to GBP ─────────────────────────────────────────────
+  // â”€â”€ Normalise + convert to GBP â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const setPrefix = `${tcgdexCode}-`;
   const sinceStr  = since ? String(since).slice(0, 10) : null;
   const valid = rawObs.filter(o => o.amount != null && Number.isFinite(Number(o.amount)));
@@ -126,7 +126,7 @@ export async function collectPrices({ set, since, dryRun = false, prewarmFx = fa
     };
   }
 
-  // ── Write observations ──────────────────────────────────────────────────────
+  // â”€â”€ Write observations â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const sequelize = getSequelize();
   let wrote = 0;
   await sequelize.transaction(async t => {

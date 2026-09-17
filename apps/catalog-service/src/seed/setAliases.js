@@ -7,7 +7,7 @@ import { Set } from '../models/index.js';
 export const ALIASES = Object.freeze({
   // Mega Evolution
   'me01': 'MEG',  'me02': 'PFL',   'me2.5': 'ASC',  'me03': 'POR',
-  'me04': 'CRI',  'me05': 'PBK',
+  'me04': 'CRI',  'me05': 'PBK',   '30th': '30C',   '30th-c': '30C',
   // Scarlet and Violet
   'svp':  'SVP',  'sv01': 'SVI',   'sv02':  'PAL',   'sv03':  'OBF',
   'sv03.5': 'MEW','sv04': 'PAR',   'sv04.5':'PAF',   'sv05':  'TEF',
