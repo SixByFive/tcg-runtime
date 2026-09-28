@@ -10,6 +10,8 @@ import { notifyUser, NotificationType } from '@sbf/contracts';
 import { recalcReputation } from '../services/reputation.service.js';
 
 import { Op, fn, col, literal } from 'sequelize';
+import { readFile } from 'node:fs/promises';
+import { join, basename } from 'node:path';
 
 const router = Router();
 router.use(requireAdmin);
@@ -66,6 +68,30 @@ router.get('/listings/proof-queue', async (req, res) => {
       limit: 200,
     });
     res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /admin/listings/:id/proof-image — serves the proof image regardless of moderation status
+router.get('/listings/:id/proof-image', async (req, res) => {
+  try {
+    const listing = await CardListing.findByPk(req.params.id, {
+      attributes: ['id', 'proofImagePath'],
+    });
+    if (!listing || !listing.proofImagePath) return res.status(404).end();
+    const PROOF_DIR = process.env.PROOF_DIR || '/var/uploads/marketplace_proofs';
+    const diskPath = join(PROOF_DIR, basename(listing.proofImagePath));
+    try {
+      const buf = await readFile(diskPath);
+      const ext = basename(diskPath).split('.').pop()?.toLowerCase() ?? 'jpg';
+      const mime = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+      res.setHeader('content-type', mime);
+      res.setHeader('cache-control', 'no-store');
+      return res.send(buf);
+    } catch {
+      return res.status(404).end();
+    }
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
