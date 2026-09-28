@@ -303,6 +303,28 @@ export async function createApp({ logger }) {
     }
   });
 
+  // ── Marketplace admin proof-image proxy ──────────────────────────────────
+  // Admin-only: forwards Authorization header so the marketplace admin router
+  // can authenticate. No moderation-status gate (unlike /marketplace-proof/:id).
+  app.get('/marketplace-admin-proof/:listingId', async (req, res) => {
+    const target = `${MARKETPLACE_URL}/marketplace/admin/listings/${encodeURIComponent(req.params.listingId)}/proof-image`;
+    try {
+      const upstream = await fetch(target, {
+        headers: {
+          ...(req.headers['authorization'] ? { authorization: req.headers['authorization'] } : {}),
+        },
+      });
+      if (!upstream.ok) return res.status(upstream.status).end();
+      const contentType = upstream.headers.get('content-type') || 'image/jpeg';
+      res.setHeader('content-type', contentType);
+      res.setHeader('cache-control', 'no-store');
+      res.send(Buffer.from(await upstream.arrayBuffer()));
+    } catch (err) {
+      logger.warn(`marketplace-admin-proof proxy error: ${err.message}`);
+      res.status(502).end();
+    }
+  });
+
   // ── Catalog admin proxy ───────────────────────────────────────────────────
   // Forwards /catalog-admin/* → catalog-service /admin/* so the admin UI is
   // reachable from the host via the gateway's published port.
