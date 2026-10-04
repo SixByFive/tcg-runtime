@@ -2,7 +2,7 @@
 
 import { Op } from 'sequelize';
 import { getSequelize } from '@sbf/database';
-import { Set, Card, CardVariant, PriceObservation, PriceLatest } from '../models/index.js';
+import { Set, Card, CardVariant, CardLegality, CardMtg, PriceObservation, PriceLatest } from '../models/index.js';
 
 export async function upsertSet(setRow, { transaction } = {}) {
   const t = transaction || null;
@@ -80,6 +80,66 @@ export async function syncVariantsForSet(setCode, variantsByCardId, { transactio
 
   if (toDelete.length) {
     await CardVariant.destroy({
+      where: { [Op.or]: toDelete },
+      transaction: t,
+    });
+  }
+
+  return { upserted: desired.length, deletedStale: toDelete.length };
+}
+
+/**
+ * Bulk-upsert the m_card_mtg side table rows for a batch of MTG cards.
+ * Expects each row to carry `card_id` as the primary key.
+ */
+export async function bulkUpsertCardMtg(mtgRows, { transaction } = {}) {
+  const t = transaction || null;
+  if (!mtgRows?.length) return { upserted: 0 };
+
+  await CardMtg.bulkCreate(mtgRows, {
+    transaction: t,
+    updateOnDuplicate: [
+      'scryfall_id', 'oracle_id', 'lang', 'layout', 'mana_cost', 'cmc',
+      'type_line', 'oracle_text', 'power', 'toughness', 'loyalty',
+      'colors', 'color_identity', 'keywords', 'produced_mana',
+      'card_faces', 'promo_types', 'frame_effects',
+      'border_color', 'collector_number', 'released_at',
+    ],
+  });
+
+  return { upserted: mtgRows.length };
+}
+
+/**
+ * Sync legality rows for a set of cards. Behaves like syncVariantsForSet:
+ * upserts the desired rows, deletes anything stale for the same card_ids.
+ *
+ * @param {string[]} cardIds - card_ids whose legalities are being replaced
+ * @param {Array<{card_id,format,status}>} desired
+ */
+export async function syncLegalitiesForCards(cardIds, desired, { transaction } = {}) {
+  const t = transaction || null;
+  if (!cardIds?.length) return { upserted: 0, deletedStale: 0 };
+
+  if (desired.length) {
+    await CardLegality.bulkCreate(desired, {
+      transaction: t,
+      updateOnDuplicate: ['status'],
+    });
+  }
+
+  const existingRows = await CardLegality.findAll({
+    where: { card_id: { [Op.in]: cardIds } },
+    attributes: ['card_id', 'format'],
+    transaction: t,
+  });
+  const desiredSet = new Set(desired.map(l => `${l.card_id}::${l.format}`));
+  const toDelete = existingRows
+    .filter(r => !desiredSet.has(`${r.card_id}::${r.format}`))
+    .map(r => ({ card_id: r.card_id, format: r.format }));
+
+  if (toDelete.length) {
+    await CardLegality.destroy({
       where: { [Op.or]: toDelete },
       transaction: t,
     });

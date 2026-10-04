@@ -368,6 +368,127 @@ async function migratePriceRollups(conn) {
 
 // ---------------------------------------------------------------------------
 
+/**
+ * Phase 1 of multi-game support: add `game` column, create MTG side tables,
+ * backfill Pokémon legality rows.
+ *
+ * All steps are idempotent — each checks its own state before acting.
+ */
+async function addGameColumns(conn) {
+  if (!await columnExists(conn, 'm_sets', 'game')) {
+    log('m_sets — adding game column …');
+    await conn.query(`
+      ALTER TABLE m_sets
+        ADD COLUMN game VARCHAR(16) NOT NULL DEFAULT 'pokemon',
+        ADD INDEX idx_game (game)
+    `);
+    ok('m_sets — game column added');
+  } else {
+    skip('m_sets.game (already exists)');
+  }
+
+  if (!await columnExists(conn, 'm_cards', 'game')) {
+    log('m_cards — adding game column …');
+    await conn.query(`
+      ALTER TABLE m_cards
+        ADD COLUMN game VARCHAR(16) NOT NULL DEFAULT 'pokemon',
+        ADD INDEX idx_game (game),
+        ADD INDEX idx_game_name (game, name)
+    `);
+    ok('m_cards — game column added');
+  } else {
+    skip('m_cards.game (already exists)');
+  }
+}
+
+async function createCardLegality(conn) {
+  if (await tableExists(conn, 'm_card_legality')) {
+    skip('m_card_legality (already exists)');
+  } else {
+    log('creating m_card_legality …');
+    await conn.query(`
+      CREATE TABLE m_card_legality (
+        id       INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        card_id  VARCHAR(80),
+        format   VARCHAR(32),
+        status   VARCHAR(16),
+        UNIQUE KEY uk_card_format (card_id, format),
+        INDEX idx_card_id (card_id),
+        INDEX idx_format_status (format, status)
+      )
+    `);
+    ok('m_card_legality — created');
+  }
+
+  // Backfill from the legacy legality_std/exp/unl flags, if those columns
+  // still exist. One row per positive flag.
+  const hasLegacy = await columnExists(conn, 'm_cards', 'legality_std');
+  if (!hasLegacy) {
+    skip('m_card_legality backfill (legacy legality_* columns are gone)');
+    return;
+  }
+
+  const [[{ n }]] = await conn.query(`SELECT COUNT(*) AS n FROM m_card_legality`);
+  if (n > 0) {
+    skip(`m_card_legality backfill (already has ${n} rows)`);
+    return;
+  }
+
+  log('m_card_legality — backfilling from legacy legality_std/exp/unl …');
+  await conn.query(`
+    INSERT INTO m_card_legality (card_id, format, status)
+    SELECT id, 'standard',  CASE WHEN legality_std = 1 THEN 'legal' ELSE 'not_legal' END FROM m_cards WHERE legality_std IS NOT NULL
+    UNION ALL
+    SELECT id, 'expanded',  CASE WHEN legality_exp = 1 THEN 'legal' ELSE 'not_legal' END FROM m_cards WHERE legality_exp IS NOT NULL
+    UNION ALL
+    SELECT id, 'unlimited', CASE WHEN legality_unl = 1 THEN 'legal' ELSE 'not_legal' END FROM m_cards WHERE legality_unl IS NOT NULL
+  `);
+  const [[{ n: filled }]] = await conn.query(`SELECT COUNT(*) AS n FROM m_card_legality`);
+  ok(`m_card_legality — ${filled} rows backfilled`);
+}
+
+async function createCardMtg(conn) {
+  if (await tableExists(conn, 'm_card_mtg')) {
+    skip('m_card_mtg (already exists)');
+    return;
+  }
+  log('creating m_card_mtg …');
+  await conn.query(`
+    CREATE TABLE m_card_mtg (
+      card_id          VARCHAR(80)  NOT NULL PRIMARY KEY,
+      scryfall_id      VARCHAR(36),
+      oracle_id        VARCHAR(36),
+      lang             VARCHAR(8),
+      layout           VARCHAR(32),
+      mana_cost        VARCHAR(64),
+      cmc              DECIMAL(5,2),
+      type_line        VARCHAR(200),
+      oracle_text      TEXT,
+      power            VARCHAR(8),
+      toughness        VARCHAR(8),
+      loyalty          VARCHAR(8),
+      colors           JSON,
+      color_identity   JSON,
+      keywords         JSON,
+      produced_mana    JSON,
+      card_faces       JSON,
+      promo_types      JSON,
+      frame_effects    JSON,
+      border_color     VARCHAR(16),
+      collector_number VARCHAR(16),
+      released_at      DATE,
+      updated_at       DATETIME DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_scryfall_id (scryfall_id),
+      INDEX idx_oracle_id   (oracle_id),
+      INDEX idx_lang        (lang),
+      INDEX idx_layout      (layout)
+    )
+  `);
+  ok('m_card_mtg — created');
+}
+
+// ---------------------------------------------------------------------------
+
 async function createSchedulerTasks(conn) {
   if (await tableExists(conn, 'scheduler_tasks')) { skip('scheduler_tasks (already exists)'); return; }
   log('creating scheduler_tasks …');
@@ -413,6 +534,11 @@ async function main() {
       await conn.query(`ALTER TABLE m_sets ADD COLUMN enabled TINYINT(1) NOT NULL DEFAULT 1`);
       ok('m_sets — enabled column added');
     }
+
+    // Phase 1 — multi-game support: `game` column + MTG side tables.
+    await addGameColumns(conn);
+    await createCardLegality(conn);
+    await createCardMtg(conn);
 
     await conn.query('SET FOREIGN_KEY_CHECKS = 1');
 

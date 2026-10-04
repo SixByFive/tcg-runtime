@@ -4,6 +4,7 @@ import { requireAdminKey } from '../middleware/requireAdminKey.js';
 import { Scheduler } from '../scheduler/index.js';
 import { seedStandardTasks, STANDARD_TASKS } from '../scheduler/seedTasks.js';
 import { ingestSet } from '../jobs/ingestSet.job.js';
+import { ingestMtgSet, ingestMtgBulk } from '../jobs/ingestMtg.job.js';
 import { collectPrices } from '../jobs/collectPrices.job.js';
 import { fxDaily } from '../jobs/fxDaily.job.js';
 import { rebuildPriceRollups } from '../jobs/rollup.job.js';
@@ -147,6 +148,44 @@ router.post('/jobs/ingest-all', async (req, res) => {
 
   res.write(JSON.stringify({ done: true, succeeded, failed, total: codes.length }) + '\n');
   res.end();
+});
+
+// POST /admin/jobs/ingest-mtg — { input, dryRun }
+// Ingest one MTG set from Scryfall. `input` may be raw ('mkm') or prefixed ('mtg-mkm').
+router.post('/jobs/ingest-mtg', async (req, res) => {
+  try {
+    const { input, dryRun } = req.body;
+    if (!input) return res.status(400).json({ error: 'input is required' });
+    const result = await ingestMtgSet({ input, dryRun: !!dryRun });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /admin/jobs/ingest-mtg-bulk — { dryRun, only, skip }
+// Downloads the Scryfall default_cards bulk file and ingests every set.
+// Streams per-set progress as NDJSON so callers can watch live.
+router.post('/jobs/ingest-mtg-bulk', async (req, res) => {
+  const { dryRun = false, only, skip } = req.body || {};
+
+  res.setHeader('Content-Type', 'application/x-ndjson');
+  res.setHeader('Transfer-Encoding', 'chunked');
+  res.flushHeaders();
+
+  try {
+    const summary = await ingestMtgBulk({
+      dryRun: !!dryRun,
+      only: Array.isArray(only) ? only : undefined,
+      skip: Array.isArray(skip) ? skip : undefined,
+      onSetDone: (evt) => res.write(JSON.stringify(evt) + '\n'),
+    });
+    res.write(JSON.stringify({ done: true, ...summary }) + '\n');
+    res.end();
+  } catch (err) {
+    res.write(JSON.stringify({ done: true, ok: false, error: err.message }) + '\n');
+    res.end();
+  }
 });
 
 // POST /admin/jobs/collect — { set, since, dryRun, providers }
