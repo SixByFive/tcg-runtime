@@ -417,7 +417,7 @@ export const typeDefs = gql`
     updatedAt: String
 
     # Preview lists for the profile tabs (full lists, no server-side cap).
-    # Available both on `me` and on `userProfile.user`.
+    # Available both on the me query and on userProfile.user.
     cardsPreview: [CollectionEntry!]
     wishlistPreview: [WishlistEntry!]
     forSalePreview: [CardListing!]
