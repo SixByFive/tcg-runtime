@@ -4,14 +4,37 @@ export default function defineCardListing(sequelize) {
   return sequelize.define('CardListing', {
     id:          { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
     sellerId:    { type: DataTypes.UUID, allowNull: false },
-    cardId:      { type: DataTypes.STRING(80), allowNull: false },
+    // cardId: required for SINGLE and (optionally) BULK_TRACKED items; null for BULK_RANDOM
+    cardId:      { type: DataTypes.STRING(80), allowNull: true },
     title:       { type: DataTypes.STRING(200), allowNull: false },
     description: { type: DataTypes.TEXT, allowNull: true },
+    // condition: single lot-wide condition (SINGLE only); bulk uses conditionMin/Max
     condition: {
       type: DataTypes.ENUM('M', 'NM', 'LP', 'MP', 'HP', 'DMG'),
-      allowNull: false,
+      allowNull: true,
     },
     variant:  { type: DataTypes.STRING(80), allowNull: true },
+
+    // Listing kind — selects which fields are meaningful
+    listingKind: {
+      type: DataTypes.ENUM('SINGLE', 'BULK_TRACKED', 'BULK_RANDOM'),
+      allowNull: false,
+      defaultValue: 'SINGLE',
+    },
+    // Bulk condition range (bulk kinds only)
+    conditionMin: {
+      type: DataTypes.ENUM('M', 'NM', 'LP', 'MP', 'HP', 'DMG'),
+      allowNull: true,
+    },
+    conditionMax: {
+      type: DataTypes.ENUM('M', 'NM', 'LP', 'MP', 'HP', 'DMG'),
+      allowNull: true,
+    },
+    cardCount:                { type: DataTypes.INTEGER, allowNull: true },
+    guaranteedInclusionsJson: { type: DataTypes.JSON,    allowNull: true },
+    lotPhotoPath:             { type: DataTypes.STRING,  allowNull: true },
+    isReturnable:             { type: DataTypes.BOOLEAN, defaultValue: true },
+
     price:    { type: DataTypes.DECIMAL(10, 4), allowNull: true },
     currency: { type: DataTypes.CHAR(3), defaultValue: 'GBP' },
     quantity: { type: DataTypes.INTEGER, defaultValue: 1 },
@@ -73,6 +96,7 @@ export default function defineCardListing(sequelize) {
       { fields: ['cardId'] },
       { fields: ['status'] },
       { fields: ['proofCode'] },
+      { fields: ['listingKind'] },
     ],
   });
 }

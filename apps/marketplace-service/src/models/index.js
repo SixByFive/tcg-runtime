@@ -1,5 +1,6 @@
 import { getSequelize } from '@sbf/database';
 import defineCardListing    from './CardListing.js';
+import defineCardListingItem from './CardListingItem.js';
 import defineOffer          from './Offer.js';
 import defineOrder          from './Order.js';
 import defineOrderDispute   from './OrderDispute.js';
@@ -11,7 +12,7 @@ import defineInventoryItem   from './InventoryItem.js';
 import defineMarketplaceAgreement from './MarketplaceAgreement.js';
 import defineUserProfile from './UserProfile.js';
 
-export let CardListing, Offer, Order, OrderDispute, SellerProfile, OwnershipRecord, UserReputation;
+export let CardListing, CardListingItem, Offer, Order, OrderDispute, SellerProfile, OwnershipRecord, UserReputation;
 export let ProductListing, InventoryItem;
 export let MarketplaceAgreement, UserProfile;
 export let sequelize;
@@ -23,6 +24,7 @@ export async function initModels() {
   sequelize = getSequelize();
 
   CardListing          = defineCardListing(sequelize);
+  CardListingItem      = defineCardListingItem(sequelize);
   Offer                = defineOffer(sequelize);
   Order                = defineOrder(sequelize);
   OrderDispute         = defineOrderDispute(sequelize);
@@ -37,6 +39,10 @@ export async function initModels() {
   // Associations
   CardListing.hasMany(Offer,  { foreignKey: 'listingId', as: 'offers' });
   CardListing.hasMany(Order,  { foreignKey: 'listingId', as: 'orders' });
+  // No DB-level FK — app-code enforcement. CardListingItem rows should be
+  // deleted explicitly when a bulk-tracked listing is removed.
+  CardListing.hasMany(CardListingItem, { foreignKey: 'listingId', as: 'items' });
+  CardListingItem.belongsTo(CardListing, { foreignKey: 'listingId' });
   Offer.belongsTo(CardListing, { foreignKey: 'listingId' });
   Order.hasOne(OrderDispute,   { foreignKey: 'orderId', as: 'dispute' });
   OrderDispute.belongsTo(Order, { foreignKey: 'orderId' });
@@ -48,6 +54,7 @@ export async function initModels() {
   // causes ER_TOO_MANY_KEYS and FK constraint failures on tables with
   // existing data. Migrations handle schema changes instead.
   await CardListing.sync({ force: false });
+  await CardListingItem.sync({ force: false });
   await Offer.sync({ force: false });
   await Order.sync({ force: false });
   await OrderDispute.sync({ force: false });

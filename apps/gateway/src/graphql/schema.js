@@ -275,6 +275,7 @@ export const typeDefs = gql`
 
     # ── Marketplace ───────────────────────────────────────────────────────────────
     createListing(input: CreateListingInput!): CardListing!
+    createBulkLot(input: CreateBulkLotInput!): CardListing!
     updateListing(id: ID!, input: UpdateListingInput!): CardListing!
     createBulkListings(listings: [BulkListingItemInput!]!): BulkListingResult!
     submitBulkProof(batchId: ID!, image: String!): BulkProofResult!
@@ -778,6 +779,43 @@ export const typeDefs = gql`
     createdAt: String
     updatedAt: String
     cardInfo: CardInfo
+
+    # Bulk-lot fields (null for SINGLE listings)
+    listingKind: ListingKind
+    conditionMin: String
+    conditionMax: String
+    cardCount: Int
+    isReturnable: Boolean
+    lotPhotoPath: String
+    proofCodeExpiresAt: String
+    guaranteedInclusions: [GuaranteedInclusion!]
+    items: [CardListingItem!]
+  }
+
+  enum ListingKind {
+    SINGLE
+    BULK_TRACKED
+    BULK_RANDOM
+  }
+
+  type GuaranteedInclusion {
+    description: String!
+    quantity: Int!
+  }
+
+  type CardListingItem {
+    id: ID!
+    cardId: String!
+    variant: String
+    condition: String
+    quantity: Int!
+  }
+
+  type OrderLineItem {
+    cardId: String!
+    variant: String
+    condition: String
+    quantity: Int!
   }
 
   type Order {
@@ -795,6 +833,8 @@ export const typeDefs = gql`
     buyer: PublicUser
     seller: PublicUser
     listing: ListingBase
+    # Bulk-tracked snapshot of what was in the lot at sale time
+    items: [OrderLineItem!]
     # Stripe client secret — present immediately after createOrderFromListing
     clientSecret: String
     # Wallet contribution in pence
@@ -1051,6 +1091,52 @@ export const typeDefs = gql`
     allowOffers: Boolean
     offerMinPrice: Float
     willTrade: Boolean
+  }
+
+  # ─── Bulk-lot inputs ──────────────────────────────────────────────────────────
+  # One listing representing a whole lot (tracked from the seller's collection
+  # or a seller-declared random lot). Forwarded to marketplace-service's
+  # POST /listings endpoint.
+  input CreateBulkLotInput {
+    listingKind: ListingKind!
+    title: String!
+    description: String
+    price: Float!
+    currency: String
+
+    # Condition range covers the whole lot
+    conditionMin: String!
+    conditionMax: String!
+    cardCount: Int!
+
+    guaranteedInclusions: [GuaranteedInclusionInput!]
+
+    # Shipping
+    parcelSize: String
+    labelPaidBy: String
+    shippingType: String
+    shippingPrice: Float
+
+    allowOffers: Boolean
+
+    # BULK_TRACKED only — the actual card rows that make up the lot
+    items: [BulkLotItemInput!]
+
+    # BULK_RANDOM only — either a pre-uploaded path or a base64 data URL
+    lotPhotoPath: String
+    lotPhotoBase64: String
+  }
+
+  input BulkLotItemInput {
+    cardId: String!
+    variant: String
+    condition: String
+    quantity: Int
+  }
+
+  input GuaranteedInclusionInput {
+    description: String!
+    quantity: Int!
   }
 
   input UpdateListingInput {

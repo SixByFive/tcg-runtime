@@ -60,6 +60,58 @@ async function sendNotification(userId, { title, body, data = {} }) {
 }
 
 /**
+ * Pick which quoted service to book. Business rule: all marketplace shipments
+ * use Royal Mail Tracked 48 (drop-off at a Post Office) where available.
+ *
+ * Royal Mail Tracked 48 is sold as separate P2G products per parcel size.
+ * Confirmed slugs for our production account (via GET /api/quotes):
+ *
+ *   LARGE_LETTER  → royalmail-largeletter-48       (drop-off; £2.90 London→Manchester)
+ *   SMALL_PARCEL  → royalmail-int_2606             (drop-off; £3.75)
+ *   MEDIUM_PARCEL → royalmail-int_2606_2616        (drop-off; £5.70)
+ *
+ * Collection variants exist (+£0.50) but default is drop-off — sellers save
+ * on each shipment and we don't need to coordinate carrier pickups.
+ *
+ * Priority:
+ *   1. Royal Mail Tracked 48 slug matching the parcel size (production)
+ *   2. Any carrier's 48-hour service (dev/sandbox fallback — P2G sandbox has no Royal Mail)
+ *   3. Cheapest overall (last resort)
+ *
+ * Overridable per-call via SHIPPING_PREFERRED_SLUG env var (exact Service.Slug match).
+ */
+const ROYAL_MAIL_SLUGS_BY_PARCEL_SIZE = {
+  LARGE_LETTER:  'royalmail-largeletter-48',
+  SMALL_PARCEL:  'royalmail-int_2606',
+  MEDIUM_PARCEL: 'royalmail-int_2606_2616',
+};
+
+function pickPreferredService(quotes, parcelSize) {
+  const override = process.env.SHIPPING_PREFERRED_SLUG;
+  if (override) {
+    const match = quotes.find((q) => q.id === override);
+    if (match) return match;
+    logger.warn(`SHIPPING_PREFERRED_SLUG="${override}" not quoted; falling back`);
+  }
+
+  // 1. Royal Mail Tracked 48 — exact slug for this parcel size
+  const rmSlug = ROYAL_MAIL_SLUGS_BY_PARCEL_SIZE[parcelSize];
+  if (rmSlug) {
+    const m = quotes.find((q) => q.id === rmSlug);
+    if (m) return m;
+  }
+
+  // 2. Any 48-hour service (sandbox / fallback) — cheapest wins
+  const any48 = quotes.filter((q) => /48/.test(q.service || ''));
+  if (any48.length) {
+    return any48.reduce((best, q) => (q.amount < best.amount ? q : best));
+  }
+
+  // 3. Cheapest tracked (all P2G services are tracked)
+  return quotes.reduce((best, q) => (q.amount < best.amount ? q : best), quotes[0]);
+}
+
+/**
  * Human-friendly message for each status transition.
  */
 function statusMessage(status, service) {
@@ -161,18 +213,21 @@ router.post('/book-for-order', async (req, res) => {
   const parcel = { ...dims, value: declaredValue ?? 10 };
 
   try {
-    // Get quotes — all P2G services are tracked; pick cheapest
+    // Get quotes and pick the preferred tracked service.
+    // Priority (business rule — all marketplace shipments use RM 48 tracked):
+    //   1. Royal Mail Tracked 48 (production only — sandbox has no Royal Mail)
+    //   2. Any carrier's "48" tracked service (sandbox fallback, dev testing)
+    //   3. Cheapest overall tracked service (last resort)
     const quotes = await getQuotes(to, from, parcel);
     if (!quotes.length) {
       return res.status(422).json({ error: 'No shipping services available for this route' });
     }
 
-    const cheapest = quotes.reduce((best, q) => (q.amount < best.amount ? q : best), quotes[0]);
-
-    logger.info(`book-for-order: order=${orderId} service=${cheapest.id} amount=${cheapest.amount}`);
+    const picked = pickPreferredService(quotes, parcelSize);
+    logger.info(`book-for-order: order=${orderId} parcel=${parcelSize} service=${picked.id} carrier=${picked.carrier} amount=${picked.amount}`);
 
     const result = await bookLabel({
-      serviceSlug: cheapest.id,
+      serviceSlug: picked.id,
       to,
       from,
       parcel,
@@ -185,6 +240,8 @@ router.post('/book-for-order', async (req, res) => {
       trackingNumber:  result.trackingNumber,
       carrier:         result.carrier ?? cheapest.carrier,
       service:         cheapest.service ?? result.service,
+      amount:          result.amount,
+      currency:        'GBP',
       labelUrl:        result.trackingUrl,
       qrCodeUrl:       result.trackingUrl,
       relatedType:     'Order',
@@ -194,7 +251,6 @@ router.post('/book-for-order', async (req, res) => {
         orderLineId: result.orderLineId,
         p2gOrderId:  result.orderId,
         p2gHash:     result.hash,
-        amount:      result.amount,
       },
     });
 
@@ -247,11 +303,10 @@ router.post('/book-for-trade', async (req, res) => {
       return res.status(422).json({ error: 'No shipping services available for this route' });
     }
 
-    const cheapest = quotes.reduce((best, q) => (q.amount < best.amount ? q : best), quotes[0]);
+    const picked = pickPreferredService(quotes, parcelSize);
+    logger.info(`book-for-trade: trade=${tradeId} parcel=${parcelSize} service=${picked.id} carrier=${picked.carrier} amount=${picked.amount}`);
 
-    logger.info(`book-for-trade: trade=${tradeId} service=${cheapest.id} amount=${cheapest.amount}`);
-
-    const result = await bookLabel({ serviceSlug: cheapest.id, to, from, parcel });
+    const result = await bookLabel({ serviceSlug: picked.id, to, from, parcel });
 
     const label = await ShippingLabel.create({
       userId,
@@ -259,6 +314,8 @@ router.post('/book-for-trade', async (req, res) => {
       trackingNumber:  result.trackingNumber,
       carrier:         result.carrier ?? cheapest.carrier,
       service:         cheapest.service ?? result.service,
+      amount:          result.amount,
+      currency:        'GBP',
       labelUrl:        result.trackingUrl,
       qrCodeUrl:       result.trackingUrl,
       relatedType:     'Trade',
@@ -268,7 +325,6 @@ router.post('/book-for-trade', async (req, res) => {
         orderLineId: result.orderLineId,
         p2gOrderId:  result.orderId,
         p2gHash:     result.hash,
-        amount:      result.amount,
       },
     });
 

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { requireAuth } from '@sbf/auth';
-import { CardListing, Offer, Order, SellerProfile, UserProfile } from '../models/index.js';
+import { CardListing, CardListingItem, Offer, Order, SellerProfile, UserProfile } from '../models/index.js';
 import { createEscrowPaymentIntent } from '../services/stripe.service.js';
 import { calculateFeeForSeller } from '../services/fees.service.js';
 import { notifyUser, NotificationType, ListingStatus, OfferStatus, OrderPaymentStatus } from '@sbf/contracts';
@@ -184,11 +184,25 @@ router.post('/:id/respond', requireAuth, async (req, res) => {
       }
     }
 
+    // Snapshot bulk-tracked contents at sale time so disputes / fulfilment
+    // have a frozen record even if the listing is later edited or removed.
+    let itemsJson = null;
+    if (listing.listingKind === 'BULK_TRACKED') {
+      const items = await CardListingItem.findAll({ where: { listingId: listing.id } });
+      itemsJson = items.map((i) => ({
+        cardId:    i.cardId,
+        variant:   i.variant,
+        condition: i.condition,
+        quantity:  i.quantity,
+      }));
+    }
+
     const order = await Order.create({
       listingId:   listing.id,
       buyerId:     offer.buyerId,
       sellerId:    listing.sellerId,
-      cardId:      listing.cardId,
+      cardId:      listing.listingKind === 'SINGLE' ? listing.cardId : null,
+      itemsJson,
       offerId:     offer.id,
       salePrice:   agreedPrice,
       platformFee: feePence / 100,

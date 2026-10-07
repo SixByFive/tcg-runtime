@@ -18,17 +18,26 @@ export function getSequelize() {
 
     sequelizeInstance = new Sequelize(
         config.db.name,
-        config.db.user, 
-        config.db.pass, 
+        config.db.user,
+        config.db.pass,
         {
-            host: config.db.host, 
-            port: config.db.port, 
+            host: config.db.host,
+            port: config.db.port,
             dialect: 'mysql',
-            logging: false, 
+            logging: false,
+            // Force utf8mb4 everywhere. Without this, mysql2's default charset
+            // interprets 4-byte UTF-8 (em-dash, é, emoji, etc.) as latin1 on
+            // read, producing mojibake like "Café" → "Café" in API responses
+            // even though the DB column stores correct UTF-8 bytes.
+            dialectOptions: {
+                charset: 'utf8mb4',
+            },
             define: {
-                freezeTableName: true, 
-            }
+                freezeTableName: true,
+                charset: 'utf8mb4',
+                collate: 'utf8mb4_unicode_ci',
+            },
         }
-    ); 
+    );
     return sequelizeInstance;
 }

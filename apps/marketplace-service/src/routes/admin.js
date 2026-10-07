@@ -112,14 +112,18 @@ router.post('/listings/:id/approve-proof', async (req, res) => {
       moderatedAt: new Date(),
     });
 
-    await OwnershipRecord.create({
-      cardId:     listing.cardId,
-      ownerId:    listing.sellerId,
-      eventType:  'LISTING_VERIFIED',
-      sourceType: 'LISTING',
-      sourceId:   listing.id,
-      proofCode:  listing.proofCode,
-    });
+    // Only single-card listings have a cardId to record ownership against;
+    // bulk-lot proofs would need per-item verification which isn't supported yet.
+    if (listing.cardId) {
+      await OwnershipRecord.create({
+        cardId:     listing.cardId,
+        ownerId:    listing.sellerId,
+        eventType:  'LISTING_VERIFIED',
+        sourceType: 'LISTING',
+        sourceId:   listing.id,
+        proofCode:  listing.proofCode,
+      });
+    }
 
     await notifyUser({
       userId: listing.sellerId,

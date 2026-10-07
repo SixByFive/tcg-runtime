@@ -6,7 +6,8 @@ import { join, basename } from 'node:path';
 import { requireAuth } from '@sbf/auth';
 import { getServiceUrl } from '@sbf/config';
 import {
-  CardListing, Offer, Order, SellerProfile, OwnershipRecord, MarketplaceAgreement, UserProfile,
+  CardListing, CardListingItem, Offer, Order, SellerProfile, OwnershipRecord, MarketplaceAgreement, UserProfile,
+  sequelize,
 } from '../models/index.js';
 
 const MARKETPLACE_RULES = [
@@ -22,7 +23,7 @@ const MARKETPLACE_RULES = [
   'SixByFive TCG reserves the right to remove any listing or suspend any account at its discretion.',
 ];
 import {
-  generateProofCode, proofCodeExpiry, saveProofImage, moderateProof,
+  generateProofCode, proofCodeExpiry, saveProofImage, saveLotImage, moderateProof,
 } from '../services/proof.service.js';
 import { getRates } from '../services/shipping.service.js';
 import { createEscrowPaymentIntent } from '../services/stripe.service.js';
@@ -98,6 +99,14 @@ router.get('/', async (req, res) => {
     if (req.query.condition) where.condition = req.query.condition;
     if (req.query.variation) where.variation = req.query.variation;
     if (req.query.sellerId)  where.sellerId  = req.query.sellerId;
+    if (req.query.listingKind) {
+      // comma-separated list, e.g. ?listingKind=BULK_TRACKED,BULK_RANDOM for the Bulk tab
+      const kinds = String(req.query.listingKind).split(',').map((s) => s.trim()).filter(Boolean);
+      if (kinds.length) where.listingKind = { [Op.in]: kinds };
+    } else {
+      // Default browse view hides bulk lots so they don't pollute per-card search
+      where.listingKind = 'SINGLE';
+    }
     if (req.query.minPrice || req.query.maxPrice) {
       where.price = {};
       if (req.query.minPrice) where.price[Op.gte] = Number(req.query.minPrice);
@@ -138,15 +147,52 @@ router.get('/', async (req, res) => {
 
 router.post('/', requireAuth, async (req, res) => {
   const {
-    cardId, title, description, condition, variant,
+    listingKind = 'SINGLE',
+    // SINGLE
+    cardId, condition, variant,
+    // bulk (both kinds)
+    conditionMin, conditionMax, cardCount,
+    guaranteedInclusions,          // [{ description, quantity }]
+    lotPhotoPath,                  // path returned by a prior lot-photo upload (optional)
+    lotPhotoBase64,                // OR a data URL to be saved server-side (BULK_RANDOM)
+    // BULK_TRACKED
+    items,                         // [{ cardId, variant, condition, quantity }]
+    // shared
+    title, description,
     price, currency, quantity,
     shippingType, shippingPrice, parcelSize, labelPaidBy,
     allowOffers, offerMinPrice, willTrade,
   } = req.body;
 
-  // price is optional only when the listing is trade-only (willTrade=true, no price)
-  if (!cardId || !title || !condition || (!price && !willTrade)) {
-    return res.status(400).json({ error: 'cardId, title, condition are required; price is required unless listing is trade-only' });
+  // Shared required: title and (price or willTrade)
+  if (!title || (!price && !willTrade)) {
+    return res.status(400).json({ error: 'title and price (unless trade-only) are required' });
+  }
+
+  // Kind-specific validation
+  if (listingKind === 'SINGLE') {
+    if (!cardId || !condition) {
+      return res.status(400).json({ error: 'SINGLE listings require cardId and condition' });
+    }
+  } else if (listingKind === 'BULK_TRACKED') {
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'BULK_TRACKED requires items[]' });
+    }
+    if (!conditionMin || !conditionMax) {
+      return res.status(400).json({ error: 'BULK_TRACKED requires conditionMin and conditionMax' });
+    }
+  } else if (listingKind === 'BULK_RANDOM') {
+    if (!cardCount || Number(cardCount) < 50) {
+      return res.status(400).json({ error: 'BULK_RANDOM requires cardCount >= 50' });
+    }
+    if (!lotPhotoPath && !lotPhotoBase64) {
+      return res.status(400).json({ error: 'BULK_RANDOM requires a lot photo' });
+    }
+    if (!conditionMin || !conditionMax) {
+      return res.status(400).json({ error: 'BULK_RANDOM requires conditionMin and conditionMax' });
+    }
+  } else {
+    return res.status(400).json({ error: 'invalid listingKind' });
   }
 
   try {
@@ -157,27 +203,31 @@ router.post('/', requireAuth, async (req, res) => {
     }
 
     // ── New-set embargo: block listings for 14 days after a set's release ────
-    const EMBARGO_DAYS = Number(process.env.NEW_SET_EMBARGO_DAYS ?? 14);
-    const catalogUrl   = getServiceUrl('CATALOG_SERVICE_URL', 4012);
-    try {
-      const catalogRes = await fetch(`${catalogUrl}/cards/${encodeURIComponent(cardId)}`);
-      if (catalogRes.ok) {
-        const cardData = await catalogRes.json();
-        const releaseDate = cardData?.Set?.release_date ?? cardData?.set?.release_date ?? null;
-        if (releaseDate) {
-          const released  = new Date(releaseDate);
-          const embargoEnd = new Date(released.getTime() + EMBARGO_DAYS * 24 * 60 * 60 * 1000);
-          if (new Date() < embargoEnd) {
-            const unlocksAt = embargoEnd.toISOString().slice(0, 10);
-            return res.status(403).json({
-              error: `This set was released less than ${EMBARGO_DAYS} days ago. Listings open on ${unlocksAt}.`,
-              embargoEndsAt: unlocksAt,
-            });
+    // Only enforced for SINGLE (has cardId). BULK_TRACKED should be checked per-item
+    // in a follow-up (fan out across items[]); BULK_RANDOM has no cardId to check.
+    if (listingKind === 'SINGLE') {
+      const EMBARGO_DAYS = Number(process.env.NEW_SET_EMBARGO_DAYS ?? 14);
+      const catalogUrl   = getServiceUrl('CATALOG_SERVICE_URL', 4012);
+      try {
+        const catalogRes = await fetch(`${catalogUrl}/cards/${encodeURIComponent(cardId)}`);
+        if (catalogRes.ok) {
+          const cardData = await catalogRes.json();
+          const releaseDate = cardData?.Set?.release_date ?? cardData?.set?.release_date ?? null;
+          if (releaseDate) {
+            const released  = new Date(releaseDate);
+            const embargoEnd = new Date(released.getTime() + EMBARGO_DAYS * 24 * 60 * 60 * 1000);
+            if (new Date() < embargoEnd) {
+              const unlocksAt = embargoEnd.toISOString().slice(0, 10);
+              return res.status(403).json({
+                error: `This set was released less than ${EMBARGO_DAYS} days ago. Listings open on ${unlocksAt}.`,
+                embargoEndsAt: unlocksAt,
+              });
+            }
           }
         }
+      } catch {
+        // Non-fatal — if catalog is unreachable, allow the listing through
       }
-    } catch {
-      // Non-fatal — if catalog is unreachable, allow the listing through
     }
 
     // Enforce subscription listing limit
@@ -201,25 +251,68 @@ router.post('/', requireAuth, async (req, res) => {
       ? sellerProfile.stripeAccountId
       : null;
 
-    const proofCode    = generateProofCode();
-    const proofExpiry  = proofCodeExpiry();
+    // Proof codes apply to single-card and tracked-bulk listings. Random-bulk
+    // uses the uploaded lot photo as its own proof and goes ACTIVE immediately.
+    const needsProof   = listingKind !== 'BULK_RANDOM';
+    const proofCode    = needsProof ? generateProofCode() : null;
+    const proofExpiry  = needsProof ? proofCodeExpiry()   : null;
 
-    const listing = await CardListing.create({
-      sellerId: req.user.sub,
-      cardId, title, description, condition, variant,
-      price, currency: currency || 'GBP',
-      quantity: quantity || 1,
-      status: ListingStatus.PENDING_PROOF,
-      proofCode,
-      proofCodeExpiresAt: proofExpiry,
-      shippingType:  shippingType || 'FIXED',
-      shippingPrice: shippingType === 'FIXED' ? (shippingPrice ?? null) : null,
-      parcelSize:    parcelSize || 'LARGE_LETTER',
-      labelPaidBy:   labelPaidBy === 'buyer' ? 'buyer' : 'seller',
-      allowOffers:   allowOffers !== false,
-      offerMinPrice: offerMinPrice ?? null,
-      willTrade:     willTrade === true,
-      sellerStripeAccountId: stripeAccountId,
+    // For random-bulk, decode the base64 lot photo now (if provided) so the
+    // resolved path can be persisted with the listing row.
+    let resolvedLotPhotoPath = null;
+    if (listingKind === 'BULK_RANDOM') {
+      resolvedLotPhotoPath = lotPhotoBase64
+        ? await saveLotImage(req.user.sub, lotPhotoBase64)
+        : lotPhotoPath;
+    }
+
+    const listing = await sequelize.transaction(async (tx) => {
+      const row = await CardListing.create({
+        sellerId: req.user.sub,
+        listingKind,
+        cardId:    listingKind === 'SINGLE' ? cardId : null,
+        condition: listingKind === 'SINGLE' ? condition : null,
+        conditionMin: listingKind === 'SINGLE' ? null : conditionMin,
+        conditionMax: listingKind === 'SINGLE' ? null : conditionMax,
+        cardCount:    listingKind === 'SINGLE' ? null : (cardCount ?? null),
+        guaranteedInclusionsJson: guaranteedInclusions ?? null,
+        lotPhotoPath: resolvedLotPhotoPath,
+        isReturnable: listingKind !== 'BULK_RANDOM',
+        title, description, variant,
+        price, currency: currency || 'GBP',
+        quantity: quantity || 1,
+        status: needsProof ? ListingStatus.PENDING_PROOF : ListingStatus.ACTIVE,
+        proofCode,
+        proofCodeExpiresAt: proofExpiry,
+        shippingType:  shippingType || 'FIXED',
+        shippingPrice: shippingType === 'FIXED' ? (shippingPrice ?? null) : null,
+        parcelSize:    parcelSize || 'LARGE_LETTER',
+        labelPaidBy:   labelPaidBy === 'buyer' ? 'buyer' : 'seller',
+        allowOffers:   allowOffers !== false,
+        offerMinPrice: offerMinPrice ?? null,
+        willTrade:     willTrade === true,
+        sellerStripeAccountId: stripeAccountId,
+      }, { transaction: tx });
+
+      if (listingKind === 'BULK_TRACKED') {
+        await CardListingItem.bulkCreate(
+          items.map((i) => ({
+            listingId: row.id,
+            cardId:    i.cardId,
+            variant:   i.variant ?? null,
+            condition: i.condition ?? null,
+            quantity:  i.quantity ?? 1,
+          })),
+          { transaction: tx },
+        );
+        // Reload with items so the response includes the snapshot clients
+        // just submitted — otherwise UIs would show an empty lot briefly.
+        return CardListing.findByPk(row.id, {
+          include: [{ model: CardListingItem, as: 'items' }],
+          transaction: tx,
+        });
+      }
+      return row;
     });
 
     res.status(201).json(listing);
@@ -489,14 +582,17 @@ router.post('/:id/proof', requireAuth, async (req, res) => {
         if (result === 'approved') {
           updates.status = ListingStatus.ACTIVE;
 
-          await OwnershipRecord.create({
-            cardId:     listing.cardId,
-            ownerId:    listing.sellerId,
-            eventType:  'LISTING_VERIFIED',
-            sourceType: 'LISTING',
-            sourceId:   listing.id,
-            proofCode:  listing.proofCode,
-          });
+          // Bulk-lot proofs don't have a single cardId to attribute ownership to.
+          if (listing.cardId) {
+            await OwnershipRecord.create({
+              cardId:     listing.cardId,
+              ownerId:    listing.sellerId,
+              eventType:  'LISTING_VERIFIED',
+              sourceType: 'LISTING',
+              sourceId:   listing.id,
+              proofCode:  listing.proofCode,
+            });
+          }
 
           await notifyUser({
             userId: listing.sellerId,
@@ -642,12 +738,25 @@ router.post('/:id/buy', requireAuth, async (req, res) => {
     const walletPence = Math.min(Math.max(0, Math.round(Number(walletAmountPence) || 0)), totalPence);
     const cardPence   = totalPence - walletPence;
 
+    // Snapshot bulk-tracked contents at sale time
+    let itemsJson = null;
+    if (listing.listingKind === 'BULK_TRACKED') {
+      const items = await CardListingItem.findAll({ where: { listingId: listing.id } });
+      itemsJson = items.map((i) => ({
+        cardId:    i.cardId,
+        variant:   i.variant,
+        condition: i.condition,
+        quantity:  i.quantity,
+      }));
+    }
+
     // Create order record
     const order = await Order.create({
       listingId:  listing.id,
       buyerId:    req.user.sub,
       sellerId:   listing.sellerId,
-      cardId:     listing.cardId,
+      cardId:     listing.listingKind === 'SINGLE' ? listing.cardId : null,
+      itemsJson,
       salePrice:  listing.price,
       platformFee: platformFeePence / 100,
       shippingCost: shippingPence / 100,

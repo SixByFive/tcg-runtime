@@ -96,6 +96,18 @@ export async function createListing(token, input) {
   });
 }
 
+/**
+ * Create a bulk-lot listing (BULK_TRACKED or BULK_RANDOM). Hits the same
+ * /marketplace/listings endpoint — the backend differentiates by `listingKind`.
+ */
+export async function createBulkLot(token, input) {
+  return request('/marketplace/listings', {
+    method: 'POST',
+    headers: authHeaders(token),
+    body: JSON.stringify(input),
+  });
+}
+
 export async function updateListing(token, id, input) {
   return request(`/marketplace/listings/${encodeURIComponent(id)}`, {
     method: 'PATCH',
