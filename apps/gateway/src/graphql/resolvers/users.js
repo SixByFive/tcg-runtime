@@ -1,3 +1,5 @@
+import { hydrateCards } from './utils.js';
+
 export const queries = {
   myDeliveryAddress: async (_, __, { token, clients, logger }) => {
     if (!token) return null;
@@ -185,6 +187,10 @@ export const mutations = {
   },
 };
 
+// Treat these as "unlimited" per profile preview — well above any realistic
+// collection/wishlist/listing count a single user holds today.
+const PREVIEW_LIMIT = 2000;
+
 export const types = {
   UserProfile: {
     planName: async (obj, _, { clients, logger }) => {
@@ -197,6 +203,64 @@ export const types = {
       } catch (e) {
         logger?.warn?.(`UserProfile.planName failed for ${userId}: ${e.message}`);
         return null;
+      }
+    },
+  },
+
+  User: {
+    // All four previews are public reads keyed on this User's id — they work
+    // the same way for `me { ... }` and for `userProfile(username).user { ... }`.
+    cardsPreview: async (obj, _, { clients, logger }) => {
+      if (!obj?.id) return [];
+      try {
+        const entries = await clients.collections.getCollection(obj.id);
+        return hydrateCards(entries, clients.catalog, logger);
+      } catch (e) {
+        logger?.warn?.(`User.cardsPreview failed for ${obj.id}: ${e.message}`);
+        return [];
+      }
+    },
+
+    wishlistPreview: async (obj, _, { clients, logger }) => {
+      if (!obj?.id) return [];
+      try {
+        const page = await clients.collections.getWishlist(obj.id, { page: 1, pageSize: PREVIEW_LIMIT });
+        const entries = Array.isArray(page) ? page : (page?.entries || []);
+        return hydrateCards(entries, clients.catalog, logger);
+      } catch (e) {
+        logger?.warn?.(`User.wishlistPreview failed for ${obj.id}: ${e.message}`);
+        return [];
+      }
+    },
+
+    forSalePreview: async (obj, _, { clients, logger }) => {
+      if (!obj?.id) return [];
+      try {
+        return await clients.marketplace.getListings({
+          sellerId: obj.id,
+          status: 'ACTIVE',
+          limit: PREVIEW_LIMIT,
+        });
+      } catch (e) {
+        logger?.warn?.(`User.forSalePreview failed for ${obj.id}: ${e.message}`);
+        return [];
+      }
+    },
+
+    forTradePreview: async (obj, _, { clients, logger }) => {
+      if (!obj?.id) return [];
+      try {
+        // getListings doesn't take a willTrade filter — fetch all seller
+        // listings for this user and keep the trade-flagged ones.
+        const items = await clients.marketplace.getListings({
+          sellerId: obj.id,
+          status: 'ACTIVE',
+          limit: PREVIEW_LIMIT,
+        });
+        return items.filter((l) => l?.willTrade);
+      } catch (e) {
+        logger?.warn?.(`User.forTradePreview failed for ${obj.id}: ${e.message}`);
+        return [];
       }
     },
   },
