@@ -415,6 +415,13 @@ export const typeDefs = gql`
     lastLogin: String
     createdAt: String
     updatedAt: String
+
+    # Preview lists for the profile tabs (full lists, no server-side cap).
+    # Available both on `me` and on `userProfile.user`.
+    cardsPreview: [CollectionEntry!]
+    wishlistPreview: [WishlistEntry!]
+    forSalePreview: [CardListing!]
+    forTradePreview: [CardListing!]
   }
 
   # Keep AuthUser as an alias so any existing internal code still compiles.
