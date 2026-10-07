@@ -147,6 +147,23 @@ export async function saveProofImage(listingId, sellerId, base64Data) {
 }
 
 /**
+ * Save a bulk-lot photo. Unlike single-card proofs, lot photos are uploaded
+ * BEFORE the listing row exists (so the path can be stored on create), so the
+ * filename is seeded by seller + timestamp rather than listing id.
+ */
+export async function saveLotImage(sellerId, base64Data) {
+  await ensureProofDir();
+  const mimeMatch = base64Data.match(/^data:image\/(\w+);base64,/);
+  const ext = mimeMatch ? mimeMatch[1].replace('jpeg', 'jpg') : 'jpg';
+  const raw = base64Data.replace(/^data:image\/\w+;base64,/, '');
+  const buf = Buffer.from(raw, 'base64');
+  const filename = `lot_${sellerId}_${Date.now()}.${ext}`;
+  const filePath = join(PROOF_DIR, filename);
+  await writeFile(filePath, buf);
+  return `marketplace_proofs/${filename}`;
+}
+
+/**
  * Run proof image moderation via OCR.
  *
  * Checks three things in OCR mode:

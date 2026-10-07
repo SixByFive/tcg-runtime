@@ -6,8 +6,13 @@ export default function defineOrder(sequelize) {
     listingId: { type: DataTypes.UUID, allowNull: false },
     buyerId:   { type: DataTypes.UUID, allowNull: false },
     sellerId:  { type: DataTypes.UUID, allowNull: false },
-    cardId:    { type: DataTypes.STRING(80), allowNull: false },
+    // Null for BULK_TRACKED and BULK_RANDOM orders — see itemsJson instead.
+    cardId:    { type: DataTypes.STRING(80), allowNull: true },
     offerId:   { type: DataTypes.UUID, allowNull: true },
+
+    // Snapshot of the lot's contents at sale time (BULK_TRACKED only).
+    // Shape: [{ cardId, variant, condition, quantity }]
+    itemsJson: { type: DataTypes.JSON, allowNull: true },
 
     // Pricing (stored in pounds)
     salePrice:    { type: DataTypes.DECIMAL(10, 4), allowNull: false },

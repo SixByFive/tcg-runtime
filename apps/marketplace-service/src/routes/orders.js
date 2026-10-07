@@ -231,14 +231,34 @@ router.post('/:id/received', requireAuth, async (req, res) => {
       }
     }
 
-    // Write ownership record
-    await OwnershipRecord.create({
-      cardId:     order.cardId,
-      ownerId:    order.buyerId,
-      eventType:  'SALE_COMPLETED',
-      sourceType: 'ORDER',
-      sourceId:   order.id,
-    });
+    // Write ownership record(s) — fan out for bulk-tracked lots so the buyer
+    // ends up with one row per card (per unit of quantity). BULK_RANDOM has
+    // no known cardIds, so we skip ownership tracking.
+    if (Array.isArray(order.itemsJson) && order.itemsJson.length > 0) {
+      for (const item of order.itemsJson) {
+        if (!item?.cardId) continue;
+        const q = Math.max(1, Number(item.quantity) || 1);
+        for (let i = 0; i < q; i++) {
+          await OwnershipRecord.create({
+            cardId:     item.cardId,
+            ownerId:    order.buyerId,
+            eventType:  'SALE_COMPLETED',
+            sourceType: 'ORDER',
+            sourceId:   order.id,
+          });
+        }
+      }
+    } else if (order.cardId) {
+      // SINGLE listings
+      await OwnershipRecord.create({
+        cardId:     order.cardId,
+        ownerId:    order.buyerId,
+        eventType:  'SALE_COMPLETED',
+        sourceType: 'ORDER',
+        sourceId:   order.id,
+      });
+    }
+    // else: BULK_RANDOM — nothing to record
 
     // Increment seller's marketplace reputation
     const [rep] = await UserReputation.findOrCreate({

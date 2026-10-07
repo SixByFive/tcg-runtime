@@ -129,6 +129,7 @@ type Mutation {
   adminUnbanUserFromTrading(userId: ID!): Boolean!
   addCardToBinder(pageId: ID!, input: BinderSlotInput!): BinderSlot!
   createListing(input: CreateListingInput!): CardListing!
+  createBulkLot(input: CreateBulkLotInput!): CardListing!
   deleteListing(id: ID!): Boolean!
   createOrderFromListing(input: CreateOrderFromListingInput!): Order!
   connectStripe: StripeConnectResult!
@@ -522,13 +523,51 @@ type CardListing {
   allowOffers: Boolean
   offerMinPrice: Float
   proofCode: String
+  proofCodeExpiresAt: String
   createdAt: String
   updatedAt: String
+
+  # Bulk-lot fields (null for SINGLE listings)
+  listingKind: ListingKind
+  conditionMin: String
+  conditionMax: String
+  cardCount: Int
+  isReturnable: Boolean
+  lotPhotoPath: String
+  guaranteedInclusions: [GuaranteedInclusion!]
+  items: [CardListingItem!]
+}
+
+enum ListingKind {
+  SINGLE
+  BULK_TRACKED
+  BULK_RANDOM
+}
+
+type GuaranteedInclusion {
+  description: String!
+  quantity: Int!
+}
+
+type CardListingItem {
+  id: ID!
+  cardId: String!
+  variant: String
+  condition: String
+  quantity: Int!
+}
+
+type OrderLineItem {
+  cardId: String!
+  variant: String
+  condition: String
+  quantity: Int!
 }
 
 type Order {
   id: ID!
   orderNumber: String
+  items: [OrderLineItem!]
   total: Float
   paidAt: String
   shippingAddressJson: JSON
@@ -663,6 +702,53 @@ input CreateListingInput {
   parcelSize: String
   allowOffers: Boolean
   offerMinPrice: Float
+}
+
+# ─── Bulk-lot inputs ──────────────────────────────────────────────────────────
+# One listing representing a whole lot (either tracked from the seller's own
+# collection or a seller-declared random lot). Forwarded to the marketplace
+# service's POST /listings endpoint — see apps/marketplace-service/src/routes/listings.js.
+
+input CreateBulkLotInput {
+  listingKind: ListingKind!
+  title: String!
+  description: String
+  price: Float!
+  currency: String
+
+  # Condition range covers the whole lot
+  conditionMin: String!
+  conditionMax: String!
+  cardCount: Int!
+
+  guaranteedInclusions: [GuaranteedInclusionInput!]
+
+  # Shipping
+  parcelSize: String
+  labelPaidBy: String
+  shippingType: String
+  shippingPrice: Float
+
+  allowOffers: Boolean
+
+  # BULK_TRACKED only — the actual card rows that make up the lot
+  items: [BulkLotItemInput!]
+
+  # BULK_RANDOM only — either a pre-uploaded path or a base64 data URL
+  lotPhotoPath: String
+  lotPhotoBase64: String
+}
+
+input BulkLotItemInput {
+  cardId: String!
+  variant: String
+  condition: String
+  quantity: Int
+}
+
+input GuaranteedInclusionInput {
+  description: String!
+  quantity: Int!
 }
 
 input CreateOrderFromListingInput {

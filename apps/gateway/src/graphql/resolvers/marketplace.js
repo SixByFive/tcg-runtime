@@ -191,6 +191,15 @@ export const mutations = {
     }
   },
 
+  createBulkLot: async (_, { input }, { token, clients, logger }) => {
+    try {
+      return await clients.marketplace.createBulkLot(token, input);
+    } catch (error) {
+      logger.warn(`createBulkLot failed: ${error.message}`);
+      throw error;
+    }
+  },
+
   createBulkListings: async (_, { listings }, { token, clients, logger }) => {
     try {
       const data = await clients.marketplace.createBulkListings(token, listings);
@@ -515,6 +524,9 @@ export const types = {
   CardListing: {
     type:      () => 'CARD',
     variation: (obj) => obj.variation ?? obj.variant ?? null,
+    // Bulk-lot JSON column → GraphQL field name mapping
+    guaranteedInclusions: (obj) => obj.guaranteedInclusionsJson ?? null,
+    items: (obj) => obj.items ?? null,
     seller:    async (obj, _, { clients, logger }) => {
       if (!obj.sellerId) return null;
       try {
@@ -570,6 +582,8 @@ export const types = {
     shippingAddressJson: (obj) => obj.shippingAddressJson ?? obj.buyerAddressJson,
     // DB column is stripeClientSecret; GQL schema exposes it as clientSecret
     clientSecret:        (obj) => obj.clientSecret ?? obj.stripeClientSecret ?? null,
+    // Bulk-tracked snapshot — null for singles and random lots
+    items:               (obj) => Array.isArray(obj.itemsJson) ? obj.itemsJson : null,
 
     buyer: async (obj, _, { clients, logger }) => {
       if (!obj.buyerId) return null;
