@@ -39,7 +39,7 @@ services:
       retries: 3
       start_period: 10s
 
-  gateway:
+  gateway: &gateway-base
     <<: *host-gateway
     container_name: Gateway
     build:
@@ -90,6 +90,16 @@ services:
       timeout: 5s
       retries: 3
       start_period: 20s
+
+  # Second gateway replica: same image and config as `gateway`, on host port 4011.
+  # nginx load-balances 4010/4011 (upstream sbf_gateway) so both CPU cores are used and
+  # the gateway can be restarted one replica at a time. The gateway keeps no state that
+  # needs sticky routing (its share-image cache is just duplicated per replica).
+  gateway-2:
+    <<: *gateway-base
+    container_name: Gateway2
+    ports:
+      - "127.0.0.1:4011:4010"
 
   auth-service:
     <<: *host-gateway
