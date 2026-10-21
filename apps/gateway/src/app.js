@@ -25,6 +25,8 @@ function getAllowedOrigins() {
   const defaults = [
     'http://localhost:3000',
     'http://127.0.0.1:3000',
+    'http://localhost:3055',
+    'http://127.0.0.1:3055',
     'http://localhost:4010',
     'http://127.0.0.1:4010',
     'https://sandbox.embed.apollographql.com',
