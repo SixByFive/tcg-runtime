@@ -14,13 +14,16 @@ const logger = createLogger(serviceName);
 const port = getServicePort('AUTH_SERVICE_PORT', 4011);
 
 const app = express();
+// Behind the gateway: trust only private-range hops so req.ip is the real client IP the gateway
+// forwards in X-Forwarded-For. Rate limits below are per real client, not per gateway container.
+app.set('trust proxy', 'loopback, linklocal, uniquelocal');
 
 app.use(helmet());
 app.use(cookieParser());
 app.use(express.json());
 
 // Global rate limit: 300 req/min per IP
-app.use(rateLimit({ windowMs: 60 * 1000, max: 300, standardHeaders: true, legacyHeaders: false }));
+app.use(rateLimit({ windowMs: 60 * 1000, max: Number(process.env.RATE_LIMIT_PER_MIN) || 600, standardHeaders: true, legacyHeaders: false }));
 
 // CORS — only allow explicitly configured origins with credentials
 const allowedOrigins = [

@@ -22,6 +22,9 @@ const port = getServicePort('CATALOG_SERVICE_PORT', 4012);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
+// Behind the gateway: trust only private-range hops so req.ip is the real client IP the gateway
+// forwards in X-Forwarded-For. Rate limits below are per real client, not per gateway container.
+app.set('trust proxy', 'loopback, linklocal, uniquelocal');
 
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(express.json());
@@ -38,7 +41,7 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(rateLimit({ windowMs: 60 * 1000, max: 300 }));
+app.use(rateLimit({ windowMs: 60 * 1000, max: Number(process.env.RATE_LIMIT_PER_MIN) || 1200 }));
 
 app.get('/health', (_req, res) => {
   res.status(200).json({ status: 'ok', service: serviceName });

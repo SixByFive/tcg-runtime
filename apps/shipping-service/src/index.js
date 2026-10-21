@@ -13,11 +13,14 @@ const logger = createLogger(serviceName);
 const port = getServicePort('SHIPPING_SERVICE_PORT', 4023);
 
 const app = express();
+// Behind the gateway: trust only private-range hops so req.ip is the real client IP the gateway
+// forwards in X-Forwarded-For. Rate limits below are per real client, not per gateway container.
+app.set('trust proxy', 'loopback, linklocal, uniquelocal');
 
 app.use(helmet());
 app.use(express.json());
 app.use(cookieParser());
-app.use(rateLimit({ windowMs: 60_000, max: 100 }));
+app.use(rateLimit({ windowMs: 60_000, max: Number(process.env.RATE_LIMIT_PER_MIN) || 400 }));
 
 app.get('/health', (_req, res) => res.json({ status: 'ok', service: serviceName }));
 

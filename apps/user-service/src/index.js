@@ -19,11 +19,14 @@ const logger = createLogger(serviceName);
 const port = getServicePort('USER_SERVICE_PORT', 4021);
 
 const app = express();
+// Behind the gateway: trust only private-range hops so req.ip is the real client IP the gateway
+// forwards in X-Forwarded-For. Rate limits below are per real client, not per gateway container.
+app.set('trust proxy', 'loopback, linklocal, uniquelocal');
 
 app.use(helmet());
 app.use(cookieParser());
 app.use(express.json());
-app.use(rateLimit({ windowMs: 60 * 1000, max: 300, standardHeaders: true, legacyHeaders: false }));
+app.use(rateLimit({ windowMs: 60 * 1000, max: Number(process.env.RATE_LIMIT_PER_MIN) || 1200, standardHeaders: true, legacyHeaders: false }));
 
 const allowedOrigins = (process.env.CORS_ORIGINS ?? '').split(',').map(o => o.trim()).filter(Boolean);
 app.use((req, res, next) => {

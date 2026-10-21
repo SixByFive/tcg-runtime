@@ -10,6 +10,7 @@ import { resolvers } from './graphql/resolvers.js';
 import { buildContext } from './graphql/context.js';
 import { checkDatabaseHealth, getDatabaseConfig } from '@sbf/database';
 import { wishlistShareImage, listingShareImage, tradeShareImage, ShareImageError } from './share/shareImages.js';
+import { clientIpMiddleware, installForwardedIpFetch } from './clientIp.js';
 
 /**
  * Small JSON sender helper so health and debug routes stay consistent.
@@ -46,6 +47,13 @@ function getAllowedOrigins() {
  */
 export async function createApp({ logger }) {
   const app = express();
+
+  // nginx (host) and the docker bridge are the only hops in front of us. Trusting just
+  // private-range hops makes `req.ip` the real client (nginx appends the true remote address)
+  // and ignores any X-Forwarded-For a client tries to spoof.
+  app.set('trust proxy', 'loopback, linklocal, uniquelocal');
+  installForwardedIpFetch();
+  app.use(clientIpMiddleware);
   const allowedOrigins = getAllowedOrigins();
 
   const corsOptions = {
