@@ -531,10 +531,10 @@ export const types = {
     items: (obj) => obj.items ?? null,
     shareImageUrl: (obj, _, { req }) =>
       obj.status === 'ACTIVE' ? listingShareUrl(req, obj.id) : null,
-    seller:    async (obj, _, { clients, logger }) => {
+    seller:    async (obj, _, { loaders, logger }) => {
       if (!obj.sellerId) return null;
       try {
-        const profile = await clients.users.getProfileById(obj.sellerId);
+        const profile = await loaders.userProfile.load(obj.sellerId);
         if (!profile) return null;
         const u = profile.user ?? {};
         return {
@@ -550,10 +550,10 @@ export const types = {
         return null;
       }
     },
-    cardInfo: async (obj, _, { clients, logger }) => {
+    cardInfo: async (obj, _, { loaders, logger }) => {
       if (!obj.cardId) return null;
       try {
-        const card = await clients.catalog.getCard(obj.cardId);
+        const card = await loaders.card.load(obj.cardId);
         if (!card) return null;
         return {
           id:         card.id         ?? null,
@@ -589,20 +589,20 @@ export const types = {
     // Bulk-tracked snapshot — null for singles and random lots
     items:               (obj) => Array.isArray(obj.itemsJson) ? obj.itemsJson : null,
 
-    buyer: async (obj, _, { clients, logger }) => {
+    buyer: async (obj, _, { loaders, logger }) => {
       if (!obj.buyerId) return null;
       try {
-        const profile = await clients.users.getProfileById(obj.buyerId);
+        const profile = await loaders.userProfile.load(obj.buyerId);
         if (!profile) return null;
         const u = profile.user ?? {};
         return { id: u.id ?? profile.userId ?? obj.buyerId, username: u.username ?? null, avatar: profile.avatar ?? u.avatar ?? null };
       } catch (e) { logger?.warn?.(`Order.buyer failed: ${e.message}`); return null; }
     },
 
-    seller: async (obj, _, { clients, logger }) => {
+    seller: async (obj, _, { loaders, logger }) => {
       if (!obj.sellerId) return null;
       try {
-        const profile = await clients.users.getProfileById(obj.sellerId);
+        const profile = await loaders.userProfile.load(obj.sellerId);
         if (!profile) return null;
         const u = profile.user ?? {};
         return { id: u.id ?? profile.userId ?? obj.sellerId, username: u.username ?? null, avatar: profile.avatar ?? u.avatar ?? null };
@@ -622,11 +622,11 @@ export const types = {
   },
 
   Offer: {
-    buyer: async (obj, _, { clients, logger }) => {
+    buyer: async (obj, _, { loaders, logger }) => {
       const id = obj.buyerId;
       if (!id) return null;
       try {
-        const profile = await clients.users.getProfileById(id);
+        const profile = await loaders.userProfile.load(id);
         if (!profile) return null;
         const u = profile.user ?? {};
         return {

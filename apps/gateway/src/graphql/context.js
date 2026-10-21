@@ -1,4 +1,5 @@
 import { extractToken } from '../middleware/extractToken.js';
+import { createLoaders } from './loaders.js';
 import * as authClient from '../clients/authClient.js';
 import * as catalogClient from '../clients/catalogClient.js';
 import * as collectionsClient from '../clients/collectionsClient.js';
@@ -19,22 +20,26 @@ import * as shippingClient from '../clients/shippingClient.js';
 export async function buildContext({ req, res, logger }) {
   const token = extractToken(req);
 
+  const clients = {
+    auth:          authClient,
+    catalog:       catalogClient,
+    collections:   collectionsClient,
+    notifications: notificationsClient,
+    messaging:     messagingClient,
+    users:         usersClient,
+    marketplace:   marketplaceClient,
+    trading:       tradingClient,
+    payments:      paymentsClient,
+    shipping:      shippingClient,
+  };
+
   return {
     req,
     res,
     logger,
     token,
-    clients: {
-      auth:          authClient,
-      catalog:       catalogClient,
-      collections:   collectionsClient,
-      notifications: notificationsClient,
-      messaging:     messagingClient,
-      users:         usersClient,
-      marketplace:   marketplaceClient,
-      trading:       tradingClient,
-      payments:      paymentsClient,
-      shipping:      shippingClient,
-    },
+    clients,
+    // Batching + per-request memoisation for N+1 fields (seller, cardInfo, ...)
+    loaders: createLoaders(clients, logger),
   };
 }

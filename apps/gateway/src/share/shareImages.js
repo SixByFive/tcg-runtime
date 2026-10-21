@@ -96,13 +96,25 @@ async function renderViaMedia(kind, data) {
   return Buffer.from(await res.arrayBuffer());
 }
 
+// Concurrent requests for the same image share one render instead of each starting
+// their own (a shared link being opened by many people at once would otherwise
+// queue N identical renders behind the renderer's concurrency cap).
+const inflight = new Map();
+
 async function cached(key, build) {
   const hit = cacheGet(key);
   if (hit) return hit;
-  const png = await build();
-  const value = { png, etag: `"${createHash('sha1').update(png).digest('hex').slice(0, 16)}"` };
-  cacheSet(key, value);
-  return value;
+  if (inflight.has(key)) return inflight.get(key);
+
+  const promise = (async () => {
+    const png = await build();
+    const value = { png, etag: `"${createHash('sha1').update(png).digest('hex').slice(0, 16)}"` };
+    cacheSet(key, value);
+    return value;
+  })().finally(() => inflight.delete(key));
+
+  inflight.set(key, promise);
+  return promise;
 }
 
 /* --------------------------------- wishlist -------------------------------- */

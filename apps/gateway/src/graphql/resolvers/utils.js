@@ -1,5 +1,5 @@
 // Zero-pad the numeric portion of a set code: sv1-001 → sv01-001, swsh1-001 → swsh01-001
-function normalizeCatalogId(id) {
+export function normalizeCatalogId(id) {
   if (!id) return id;
   return String(id).replace(
     /^([a-z]+)(\d+)(-.+)$/i,
