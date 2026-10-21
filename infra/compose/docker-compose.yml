@@ -53,6 +53,7 @@ services:
       NODE_OPTIONS: --max-old-space-size=200
       DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN:-}
       INTERNAL_API_KEY: ${INTERNAL_API_KEY:-}
+      PUBLIC_GATEWAY_URL: ${PUBLIC_GATEWAY_URL:-}
       AUTH_SERVICE_URL: http://auth-service:4011
       CATALOG_SERVICE_URL: http://catalog-service:4012
       COLLECTIONS_SERVICE_URL: http://collections-service:4013
@@ -217,6 +218,7 @@ services:
       NODE_ENV: production
       NODE_OPTIONS: --max-old-space-size=256
       ACCESS_TOKEN_SECRET: ${ACCESS_TOKEN_SECRET:-}
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY:-}
     expose:
       - "4017"
     volumes:

@@ -9,6 +9,7 @@ import { typeDefs } from './graphql/schema.js';
 import { resolvers } from './graphql/resolvers.js';
 import { buildContext } from './graphql/context.js';
 import { checkDatabaseHealth, getDatabaseConfig } from '@sbf/database';
+import { wishlistShareImage, listingShareImage, tradeShareImage, ShareImageError } from './share/shareImages.js';
 
 /**
  * Small JSON sender helper so health and debug routes stay consistent.
@@ -302,6 +303,45 @@ export async function createApp({ logger }) {
       res.status(502).end();
     }
   });
+
+  // ── Share images ─────────────────────────────────────────────────────────
+  // Public 1200x630 PNGs for wishlists and marketplace listings. Rendered by
+  // media-service from data hydrated here; cached in-process and by clients.
+  // Usable as an <img>, og:image, Discord attachment, or mobile share image.
+  function sendShareImage(res, getImage, ifNoneMatch) {
+    return getImage()
+      .then(({ png, etag }) => {
+        res.setHeader('etag', etag);
+        res.setHeader('cache-control', 'public, max-age=300, stale-while-revalidate=3600');
+        res.setHeader('cross-origin-resource-policy', 'cross-origin');
+        if (ifNoneMatch === etag) return res.status(304).end();
+        res.setHeader('content-type', 'image/png');
+        return res.send(png);
+      })
+      .catch((err) => {
+        if (err instanceof ShareImageError) return res.status(err.status).json({ error: err.message });
+        logger.warn(`share image error: ${err.message}`);
+        return res.status(500).json({ error: 'Failed to render share image' });
+      });
+  }
+
+  const stripPng = (v) => String(v).replace(/\.png$/i, '');
+
+  app.get('/share/wishlist/:username', (req, res) =>
+    sendShareImage(
+      res,
+      () => wishlistShareImage(stripPng(req.params.username), { status: req.query.status }),
+      req.headers['if-none-match'],
+    ),
+  );
+
+  app.get('/share/trade/:id', (req, res) =>
+    sendShareImage(res, () => tradeShareImage(stripPng(req.params.id)), req.headers['if-none-match']),
+  );
+
+  app.get('/share/listing/:id', (req, res) =>
+    sendShareImage(res, () => listingShareImage(stripPng(req.params.id)), req.headers['if-none-match']),
+  );
 
   // ── Marketplace admin proof-image proxy ──────────────────────────────────
   // Admin-only: forwards Authorization header so the marketplace admin router

@@ -9,6 +9,8 @@
     "start": "cross-env SERVICE_NAME=media-service node src/index.js"
   },
   "dependencies": {
+    "@fontsource/inter": "^5.3.0",
+    "@resvg/resvg-js": "^2.6.2",
     "@sbf/auth": "workspace:*",
     "@sbf/config": "workspace:*",
     "@sbf/logger": "workspace:*",
@@ -17,6 +19,7 @@
     "express": "^4.21.2",
     "helmet": "^8.0.0",
     "multer": "^1.4.5-lts.1",
+    "satori": "^0.63.2",
     "sharp": "^0.33.4"
   }
 }

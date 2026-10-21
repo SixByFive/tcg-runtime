@@ -1,3 +1,5 @@
+import { listingShareUrl } from '../../share/shareImages.js';
+
 export const queries = {
   listings: async (_, args, { clients, logger }) => {
     try {
@@ -527,6 +529,8 @@ export const types = {
     // Bulk-lot JSON column → GraphQL field name mapping
     guaranteedInclusions: (obj) => obj.guaranteedInclusionsJson ?? null,
     items: (obj) => obj.items ?? null,
+    shareImageUrl: (obj, _, { req }) =>
+      obj.status === 'ACTIVE' ? listingShareUrl(req, obj.id) : null,
     seller:    async (obj, _, { clients, logger }) => {
       if (!obj.sellerId) return null;
       try {

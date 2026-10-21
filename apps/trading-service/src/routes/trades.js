@@ -60,6 +60,22 @@ router.get('/browse', async (req, res) => {
   }
 });
 
+// GET /trades/public/:id — one open (INITIATED) trade, for share images.
+// Same visibility as /browse: only trades still on the board, no private fields.
+router.get('/public/:id', async (req, res) => {
+  try {
+    const trade = await Trade.findOne({
+      where: { id: req.params.id, status: 'INITIATED' },
+      include: [{ model: TradeCard, as: 'cards' }],
+      attributes: { exclude: ['addressA', 'addressB', 'trackingNumberA', 'trackingNumberB'] },
+    });
+    if (!trade) return res.status(404).json({ error: 'Trade not found' });
+    res.json(trade);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // All routes below require authentication
 router.use(requireAuth);
 

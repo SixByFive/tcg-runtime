@@ -84,8 +84,9 @@ export async function submitListingProof(token, id, image) {
   });
 }
 
-export async function getListing(id) {
-  return request(`/marketplace/listings/${encodeURIComponent(id)}`);
+export async function getListing(id, { includeItems = false } = {}) {
+  const qs = includeItems ? '?items=1' : '';
+  return request(`/marketplace/listings/${encodeURIComponent(id)}${qs}`);
 }
 
 export async function createListing(token, input) {

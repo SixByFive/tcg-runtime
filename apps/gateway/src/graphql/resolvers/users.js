@@ -1,4 +1,5 @@
 import { hydrateCards } from './utils.js';
+import { wishlistShareUrl } from '../../share/shareImages.js';
 
 export const queries = {
   myDeliveryAddress: async (_, __, { token, clients, logger }) => {
@@ -263,5 +264,8 @@ export const types = {
         return [];
       }
     },
+
+    wishlistShareImageUrl: (obj, { status }, { req }) =>
+      obj?.username ? wishlistShareUrl(req, obj.username, status) : null,
   },
 };

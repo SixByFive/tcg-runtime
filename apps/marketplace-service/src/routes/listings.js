@@ -444,8 +444,10 @@ router.get('/:id/proof-image', async (req, res) => {
 
 router.get('/:id', async (req, res) => {
   try {
+    // ?items=1 includes the bulk-lot contents (used by the gateway share image)
     const listing = await CardListing.findByPk(req.params.id, {
       attributes: { exclude: ['proofImagePath', 'sellerStripeAccountId'] },
+      ...(req.query.items === '1' ? { include: [{ model: CardListingItem, as: 'items' }] } : {}),
     });
     if (!listing) return res.status(404).json({ error: 'Listing not found' });
 

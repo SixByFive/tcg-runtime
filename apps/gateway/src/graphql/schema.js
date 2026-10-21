@@ -422,6 +422,10 @@ export const typeDefs = gql`
     wishlistPreview: [WishlistEntry!]
     forSalePreview: [CardListing!]
     forTradePreview: [CardListing!]
+
+    # Public PNG (1200x630) summarising this user's wishlist, for sharing.
+    # Optional status filter: ACTIVE | GRAIL | EVENTUAL | UPGRADE.
+    wishlistShareImageUrl(status: String): String
   }
 
   # Keep AuthUser as an alias so any existing internal code still compiles.
@@ -797,6 +801,9 @@ export const typeDefs = gql`
     proofCodeExpiresAt: String
     guaranteedInclusions: [GuaranteedInclusion!]
     items: [CardListingItem!]
+
+    # Public PNG (1200x630) for sharing this listing. Null unless ACTIVE.
+    shareImageUrl: String
   }
 
   enum ListingKind {
@@ -1614,6 +1621,9 @@ export const typeDefs = gql`
     cards: [TradeCard!]
     proofs: [TradeProof!]
     dispute: TradeDispute
+
+    # Public PNG (1200x630) for sharing this trade. Null unless the trade is still open (INITIATED).
+    shareImageUrl: String
   }
 
   type TradeBan {

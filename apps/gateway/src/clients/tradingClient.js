@@ -40,6 +40,10 @@ export async function browseTrades({ page = 1, pageSize = 20 } = {}) {
   return data?.trades ?? [];
 }
 
+export async function getPublicTrade(id) {
+  return request(`/trades/public/${encodeURIComponent(id)}`);
+}
+
 export async function getMyTrades(token, { page = 1, pageSize = 20, status } = {}) {
   const p = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
   if (status) p.set('status', status);

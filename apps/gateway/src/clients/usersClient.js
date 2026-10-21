@@ -44,6 +44,7 @@ export async function getProfile(username) {
     bio:              profile.bio  ?? null,
     favouritePokemon: profile.favouritePokemon ?? null,
     avatar:           profile.avatar ?? null,
+    publicProfile:    profile.publicProfile ?? null,
     user: {
       id:            data.id            ?? null,
       username:      data.username      ?? null,

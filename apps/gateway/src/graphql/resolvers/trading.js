@@ -1,3 +1,5 @@
+import { tradeShareUrl } from '../../share/shareImages.js';
+
 export const queries = {
   browseTrades: async (_, { page = 1, pageSize = 20 }, { clients, logger }) => {
     try {
@@ -198,5 +200,7 @@ export const types = {
   Trade: {
     addressASet: (obj) => obj.addressA != null && obj.addressA !== '',
     addressBSet: (obj) => obj.addressB != null && obj.addressB !== '',
+    shareImageUrl: (obj, _, { req }) =>
+      obj.status === 'INITIATED' ? tradeShareUrl(req, obj.id) : null,
   },
 };

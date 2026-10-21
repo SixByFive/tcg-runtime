@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import { getServicePort } from '@sbf/config';
 import { createLogger } from '@sbf/logger';
 import uploadRouter from './routes/upload.js';
+import renderRouter from './routes/render.js';
 
 const serviceName = 'media-service';
 const logger = createLogger(serviceName);
@@ -32,6 +33,7 @@ app.get('/health', (_req, res) => {
 });
 
 app.use('/upload', uploadRouter);
+app.use('/render', renderRouter);
 
 app.use((err, _req, res, _next) => {
   logger.error(err.message);

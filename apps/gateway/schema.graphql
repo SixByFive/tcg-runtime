@@ -214,6 +214,7 @@ type User {
   lastLogin: String
   createdAt: String
   updatedAt: String
+  wishlistShareImageUrl(status: String): String
 }
 
 type AuthUser {
@@ -536,6 +537,7 @@ type CardListing {
   lotPhotoPath: String
   guaranteedInclusions: [GuaranteedInclusion!]
   items: [CardListingItem!]
+  shareImageUrl: String
 }
 
 enum ListingKind {
@@ -1023,6 +1025,7 @@ type Trade {
   cards: [TradeCard!]
   proofs: [TradeProof!]
   dispute: TradeDispute
+  shareImageUrl: String
 }
 
 type TradeBan {
