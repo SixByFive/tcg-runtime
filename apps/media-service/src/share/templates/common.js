@@ -1,4 +1,12 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { h, img } from '../h.js';
+
+// The site's own wordmark (same file as tcg-logo-white.png in the web and mobile apps), read once.
+const LOGO_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'assets', 'tcg-logo-white.png');
+const LOGO_SRC = `data:image/png;base64,${fs.readFileSync(LOGO_PATH).toString('base64')}`;
+const LOGO_ASPECT = 942 / 337;
 
 export const WIDTH = 1200;
 export const HEIGHT = 630;
@@ -53,27 +61,9 @@ export function canvas(...children) {
   );
 }
 
-export function brand() {
-  return h(
-    'div',
-    { alignItems: 'center' },
-    h(
-      'div',
-      {
-        width: 36,
-        height: 36,
-        borderRadius: 10,
-        alignItems: 'center',
-        justifyContent: 'center',
-        fontSize: 14,
-        fontWeight: 900,
-        letterSpacing: 0.5,
-        backgroundImage: `linear-gradient(135deg, ${C.blue} 0%, ${C.blueLight} 100%)`,
-      },
-      h('div', {}, 'SBF'),
-    ),
-    h('div', { marginLeft: 12, fontSize: 20, fontWeight: 700, color: C.muted }, 'SixByFive TCG'),
-  );
+/** The SixByFive TCG wordmark, top corner of every share image. */
+export function brand(height = 56) {
+  return img(LOGO_SRC, { width: Math.round(height * LOGO_ASPECT), height });
 }
 
 export function avatar(src, size, fallbackText = '') {
