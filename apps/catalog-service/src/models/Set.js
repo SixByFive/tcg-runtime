@@ -6,6 +6,11 @@ export function defineSet(sequelize) {
       type: DataTypes.STRING(32),
       primaryKey: true,
     },
+    game: {
+      type: DataTypes.STRING(16),
+      allowNull: false,
+      defaultValue: 'pokemon',
+    },
     name: DataTypes.STRING(200),
     era: DataTypes.STRING(100),
     release_date: DataTypes.DATEONLY,
@@ -30,6 +35,7 @@ export function defineSet(sequelize) {
     timestamps: false,
     indexes: [
       { fields: ['abbreviation'] },
+      { fields: ['game'] },
     ],
   });
 }

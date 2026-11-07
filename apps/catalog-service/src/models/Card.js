@@ -6,6 +6,11 @@ export function defineCard(sequelize) {
       type: DataTypes.STRING(80),
       primaryKey: true,
     },
+    game: {
+      type: DataTypes.STRING(16),
+      allowNull: false,
+      defaultValue: 'pokemon',
+    },
     set_code: DataTypes.STRING(32),
     number: DataTypes.STRING(16),
     name: DataTypes.STRING(200),
@@ -30,6 +35,8 @@ export function defineCard(sequelize) {
       { fields: ['set_code'] },
       { fields: ['number'] },
       { fields: ['name'] },
+      { fields: ['game'] },
+      { fields: ['game', 'name'] },
     ],
   });
 }
